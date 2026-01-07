@@ -11,7 +11,7 @@ class PerishableLifecycle(PyEnum):
     NEAR_EXPIRY = "near_expiry"
     EXPIRED = "expired"
 
-class ItemPerishableNonPerishable(PyEnum):
+class ItemPerishableNonPerishable(str,PyEnum):
     PERISHABLE="perishable"
     NON_PERISHABLE="non_perishable"    
 
@@ -28,6 +28,8 @@ class Inventory(TenantMixin,Base):
     total_cost = Column(Float, nullable=False)
     type = Column(String, default="")
     expiry_date = Column(Date)
+    purchase_unit = Column(String, nullable=False)
+    purchase_unit_size = Column(Integer, nullable=False)
     shelf_life_in_days = Column(Integer)
     is_active = Column(Boolean,default=True)
     date_added = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -49,8 +51,13 @@ class InventoryBatch(TenantMixin,Base):
     inventory_item_id = Column(Integer, ForeignKey("inventory.id", ondelete="CASCADE"), nullable=False)
     batch_number = Column(String(100), nullable=False)
     expiry_date = Column(Date)
-    quantity_received = Column(Numeric(12, 3), nullable=False)
-    quantity_remaining = Column(Numeric(12, 3), nullable=False)
+    quantity_received = Column(Numeric(12, 3), nullable=True)
+    quantity_remaining = Column(Numeric(12, 3), nullable=True)
+    packets = Column(Integer, nullable=True)
+    pieces = Column(Integer, nullable=True)
+    total_pieces = Column(Integer, nullable=True)
+    price_per_packet = Column(Float)
+    price_per_piece = Column(Float)
     unit_cost = Column(Numeric(10, 2))
     is_active = Column(Boolean, default=True)
     lifecycle_stage = Column(Enum(PerishableLifecycle))
@@ -59,7 +66,7 @@ class InventoryBatch(TenantMixin,Base):
     
     # Relationships - tenant inherited from TenantMixin
     item = relationship("Inventory", back_populates="batches")
-    transactions = relationship("InventoryTransaction", back_populates="batch")
+    # transactions = relationship("InventoryTransaction", back_populates="batch")
     
     # __table_args__ = (
     #     Index("idx_batch_tenant", "tenant_id"),
@@ -93,6 +100,6 @@ class ItemCategory(TenantMixin,Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String(100), nullable=False)
-    category_type = Column(Enum(ItemPerishableNonPerishable, name="item_category_type"), nullable=False)
+    category_type = Column(Enum(ItemPerishableNonPerishable, name="item_category_type",native_enum=True,create_constraint=False,validate_strings=True), nullable=False)
 
-    inventory_items = relationship("Inventory", back_populates="item_category")
+    inventory_items = relationship("Inventory", back_populates="item_category" ,cascade="all,delete-orphan")

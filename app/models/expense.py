@@ -1,9 +1,10 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime
 from datetime import datetime
 from app.db.base import Base
+from app.db.mixins import TenantMixin
 
 
-class Expense(Base):
+class Expense(TenantMixin,Base):
     __tablename__ = "expenses"
     
     id = Column(Integer, primary_key=True, index=True)

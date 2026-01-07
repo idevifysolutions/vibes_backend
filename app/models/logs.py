@@ -2,8 +2,8 @@ from sqlalchemy import Column, Integer, Float, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.db.base import Base
-
-class InventoryLog(Base):
+from app.db.mixins import TenantMixin
+class InventoryLog(TenantMixin,Base):
     __tablename__ = "inventory_log"
 
     id = Column(Integer, primary_key=True, index=True)

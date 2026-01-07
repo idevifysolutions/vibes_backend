@@ -19,11 +19,11 @@ class User(TenantMixin,Base):
     __tablename__ = "users"
     
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(100), unique=True, nullable=False, index=True)
     email = Column(String(255), unique=True, nullable=False, index=True)
+    mobile_no = Column(String(15), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(200))
-    role = Column(Enum(UserRole), nullable=False)
+    role = Column(Enum(UserRole,values_callable=lambda enum:[e.value for e in enum],native_enum=False),nullable=False)
     is_active = Column(Boolean, default=True)
     is_2fa_enabled = Column(Boolean, default=False)
     failed_login_attempts = Column(Integer, default=0)
@@ -40,8 +40,8 @@ class User(TenantMixin,Base):
     
     tenant = relationship("Tenant", back_populates="users")
     branch_access = relationship("UserBranchAccess", back_populates="user")
-    transactions = relationship("InventoryTransaction", back_populates="user")
-    adjustments = relationship("InventoryAdjustment", back_populates="user")
+    # transactions = relationship("InventoryTransaction", back_populates="user")
+    # adjustments = relationship("InventoryAdjustment", back_populates="user")
 
 class UserBranchAccess(TenantMixin, Base):
     __tablename__ = "user_branch_access"

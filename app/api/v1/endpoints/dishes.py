@@ -10,7 +10,6 @@ from app.api.deps import get_db
 from app.models.dish import Dish, DishIngredient, DishType
 from app.models.inventory import Inventory
 from app.schemas.dish import AddDishRequest,DishOut,DishIngredientOut, DishUpdate
-# from app.services.dish_service import DishService
 
 router = APIRouter()
 

@@ -1,23 +1,36 @@
 # app/schemas/inventory.py
 from pydantic import BaseModel , Field
-from datetime import datetime
-from typing import Optional
-
+from datetime import date, datetime
+from typing import List, Optional
+from enum import Enum
 class InventoryBase(BaseModel):
     name: str
     quantity: float
     unit: str
+    item_category_id: int
+    storage_location_id: int
     price_per_unit: float
     total_cost: float
+    purchase_unit: str
+    purchase_unit_size: int
     type: Optional[str] = ""
+    expiry_life: Optional[date] = None
+    shelf_life_in_days: Optional[int] = Field(None, ge=0)
+    date_added: Optional[datetime] = None
 
 class InventoryItemCreate(BaseModel):
     name: str
     quantity: float
     unit: str
-    price_per_unit: Optional[float] = None
-    total_cost: Optional[float] = None
-    type: Optional[str] = None
+    item_category_id: int
+    storage_location_id: int
+    price_per_unit: float
+    total_cost: float
+    purchase_unit: str
+    purchase_unit_size: int
+    type: Optional[str] = ""
+    expiry_life: Optional[date] = None
+    shelf_life_in_days: Optional[int] = Field(None, ge=0)
     date_added: Optional[datetime] = None
     
 class InventoryRead(InventoryBase):
@@ -25,7 +38,7 @@ class InventoryRead(InventoryBase):
     date_added: datetime
 
     class Config:
-        orm_mode = True  # <-- Important to read SQLAlchemy models
+        from_attributes  = True  # <-- Important to read SQLAlchemy models
 
 class InventoryUpdate(BaseModel):
     name: Optional[str] = None
@@ -70,12 +83,26 @@ class InventoryUpdate(BaseModel):
 
 class InventoryOut(InventoryBase):
     id: int
+    name: str
+    quantity: float
+    unit: str
     price_per_unit: float
     total_cost: float
     date_added: datetime
+    expiry_date: date | None
     
     class Config:
         from_attributes = True
+
+class InventoryResponse(BaseModel):
+    success: bool
+    message: str
+    data: InventoryOut      
+
+class InventoryListResponse(BaseModel):
+    success: bool
+    message: str
+    data: List[InventoryOut]       
 
 
 # class InventorySearch(BaseModel):
@@ -83,3 +110,24 @@ class InventoryOut(InventoryBase):
 #     type: Optional[str] = None
 #     start_date: Optional[str] = None
 #     end_date: Optional[str] = None
+
+class ItemPerishableNonPerishable(str,Enum):
+    PERISHABLE="perishable"
+    NON_PERISHABLE="non_perishable"  
+
+class ItemCategoryCreate(BaseModel):
+    name: str
+    category_type: ItemPerishableNonPerishable 
+
+class ItemCategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    category_type: Optional[ItemPerishableNonPerishable] = None
+
+class ItemCategoryResponse(BaseModel):
+    id: int
+    name: str
+    category_type: ItemPerishableNonPerishable
+
+    class Config:
+        from_attributes  = True             
+

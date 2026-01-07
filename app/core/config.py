@@ -23,9 +23,12 @@ class Settings(BaseSettings):
     DATABASE_POOL_SIZE: int = 5
     DATABASE_MAX_OVERFLOW: int = 10
 
-    # ---------------------
+    #env
+    SECRET_KEY: str = "for_example"
+    ALGORITHM: str ="HS256"
+    ACCESS_TOKEN_EXPIRE_DAYS: int =1
+
     # Validators
-    # ---------------------
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
@@ -47,9 +50,7 @@ class Settings(BaseSettings):
         data = info.data
         return f"postgresql+psycopg2://{data['DB_USER']}:{data['DB_PASSWORD']}@{data['DB_HOST']}:{data['DB_PORT']}/{data['DB_NAME']}"
 
-    # ---------------------
     # Properties
-    # ---------------------
     @property
     def is_postgresql(self) -> bool:
         return self.DATABASE_URL.startswith("postgresql")
@@ -58,9 +59,7 @@ class Settings(BaseSettings):
     def is_sqlite(self) -> bool:
         return self.DATABASE_URL.startswith("sqlite")
 
-    # ---------------------
     # Config
-    # ---------------------
     model_config = SettingsConfigDict(
         env_file="env/.env.local",
         case_sensitive=True,

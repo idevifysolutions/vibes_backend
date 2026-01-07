@@ -4,7 +4,7 @@ from .inventory import Inventory
 from .dish import Dish, DishType, DishIngredient
 from .expense import Expense
 from .logs import InventoryLog
-from .users import User
+from .users import User,UserRole,UserBranchAccess
 from .branch import Branch
 
 __all__ = [
@@ -16,5 +16,7 @@ __all__ = [
     "Expense",
     "InventoryLog",
     "User",
-    "Branch"
+    "Branch",
+    "UserRole",
+    "UserBranchAccess"
 ]
