@@ -2,12 +2,13 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from app.schemas.superadmin import SuperAdminCreate, TokenResponse,LoginRequest,LoginResponse
+from app.schemas.common import ApiResponse
+from app.schemas.superadmin import LoginData, SuperAdminCreate, TokenResponse,LoginRequest
 from app.models import User, UserRole
 from app.api.deps import get_db
 from app.utils.auth_helper import create_access_token, validate_password,hash_password, verify_password
 from sqlalchemy.exc import SQLAlchemyError
-
+import logging
 
 router = APIRouter()
 
@@ -106,17 +107,21 @@ def create_super_admin(payload: SuperAdminCreate, db:Session = Depends(get_db)):
 #     return TokenResponse(access_token=access_token)
 
 # for swagger authentication
-@router.post("/login", response_model=LoginResponse)
+@router.post("/login", response_model=ApiResponse[LoginData],status_code=status.HTTP_200_OK)
 def superadmin_login(
-    payload: OAuth2PasswordRequestForm = Depends(),
+    payload: LoginRequest,
     db: Session = Depends(get_db),
 ):
     try:
     
-            email = payload.username  #username == email
+            email = payload.email  #username == email
+            print(email,"EMAIL")
             password = payload.password
+            print(password,"PASSWORD")
 
             user = db.query(User).filter(User.email == email).first()
+
+            print(user,"TEA")
 
 
             if not user:
@@ -171,13 +176,16 @@ def superadmin_login(
             )
 
             return {
+                "success": True,
+                "status_code": status.HTTP_200_OK,
+                "message": "Login successful",
                 "data": {
-                    "status": status.HTTP_200_OK,
-                    "message": "Login successful",
                     "access_token": access_token,
                     "token_type": "bearer",
                     "role": user.role.value
-                }
+                    # "full_name":user.full_name,
+                    # "email":user.email
+               }
             }
     except HTTPException:
         # Re-raise known FastAPI errors
@@ -189,6 +197,10 @@ def superadmin_login(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Login failed due to a server error"
         )
+    # HTTPException(
+    #         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    #         detail="Login failed due to a server error"
+    #     )
 
 #unlock user
 # @router.post("/users/{user_id}/unlock")

@@ -6,7 +6,7 @@ from sqlalchemy.orm import relationship
 from app.db.mixins import TenantMixin
 from sqlalchemy.dialects.postgresql import UUID
 
-class UserRole(PyEnum):
+class UserRole(str,PyEnum):
     SUPER_ADMIN = "super_admin"
     BRANCH_MANAGER = "branch_manager"
     KITCHEN_MANAGER = "kitchen_manager"
@@ -40,7 +40,7 @@ class User(TenantMixin,Base):
     
     tenant = relationship("Tenant", back_populates="users")
     branch_access = relationship("UserBranchAccess", back_populates="user")
-    # transactions = relationship("InventoryTransaction", back_populates="user")
+    transactions = relationship("InventoryTransaction", back_populates="user")
     # adjustments = relationship("InventoryAdjustment", back_populates="user")
 
 class UserBranchAccess(TenantMixin, Base):

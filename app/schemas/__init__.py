@@ -20,7 +20,7 @@ from .dish import (
 #     PreparationCheckResponse
 # )
 
-from .superadmin import (SuperAdminCreate,TenantSchema,TokenResponse,LoginRequest,LoginResponse)
+from .superadmin import (SuperAdminCreate,TenantSchema,TokenResponse,LoginRequest)
 __all__ = [
     #superadmin
     "SuperAdminCreate",
@@ -44,4 +44,5 @@ __all__ = [
     "PrepareDishRequest",
     "PreparationResponse",
     "PreparationCheckResponse",
+    "ApiResponse"
 ]

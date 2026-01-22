@@ -6,10 +6,12 @@ from app.api.deps import get_db
 from app.core.config import settings
 from jose import jwt ,JWTError
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer,HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-
+from uuid import UUID
 from app.models.users import User, UserRole
+
+security = HTTPBearer()
 
 pwd_context = CryptContext(
     schemes=["argon2"],
@@ -52,12 +54,15 @@ def create_access_token(data: dict):
 #Extract a Bearer token from the Authorization header using the OAuth2 standard
 
 token_authorization = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+(token_authorization,"TOKEN")
 
 def get_current_user(
-    token: str = Depends(token_authorization),
+   credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db),
 ):
-    
+    token = credentials.credentials
+
+    print("RAW TOKEN", token)
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         if payload.get("type") != "access":
@@ -104,6 +109,33 @@ def require_tenant_user(
         )
     return current_user
 
+def get_tanant_scope(
+    current_user: User,
+    requested_tenant_id: UUID | None = None
+) -> UUID:
+   
+    if current_user.role == UserRole.SUPER_ADMIN:
+        if not requested_tenant_id:
+           raise HTTPException(
+               status_code=400,
+               detail="tenant_id is required for super admin"
+           )
+        return requested_tenant_id
+    
+    if not current_user.tenant_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Tenant access required"
+        )
+    
+    if requested_tenant_id and requested_tenant_id != current_user.tenant_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You cannot access another tenant"
+        )
+    
+    return current_user.tenant_id
+   
 
 #for production
 # pwd_context = CryptContext(

@@ -20,9 +20,9 @@ class InventoryService:
     def __init__(self, db: Session):
         self.db = db
     
-    def get_all_items(self) -> List[Inventory]:
+    def get_all_items(self,tenant_id:UUID) -> List[Inventory]:
         """Get all inventory items"""
-        return self.db.query(Inventory).all()
+        return self.db.query(Inventory).filter(Inventory.tenant_id == tenant_id).all()
     
     def get_item_by_id(self, item_id: int) -> Optional[Inventory]:
         """Get inventory item by ID"""

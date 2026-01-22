@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.db.base import Base
 from app.db.mixins import TenantMixin
+
 class InventoryLog(TenantMixin,Base):
     __tablename__ = "inventory_log"
 

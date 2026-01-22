@@ -78,7 +78,7 @@ def create_tenant_with_admin(db: Session, payload: TenantCreateWithUser):
         )
 
 @router.post("/create-with-admin")
-def create_tenant_api(
+def create_tenant(
     payload: TenantCreateWithUser,
     db: Session = Depends(get_db),
     _: User = Depends(require_super_admin), 

@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     LOG_FILE: str = "app.log"
 
     # Database
-    DB_HOST: str = "localhost"
+    DB_HOST: str = "db"
     DB_PORT: int = 5432
     DB_NAME: str = "inventory"
     DB_USER: str = "postgres"

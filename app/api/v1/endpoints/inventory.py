@@ -5,17 +5,22 @@ Inventory management endpoints
 from fastapi import APIRouter, Depends, HTTPException, Query , status
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import datetime
+from datetime import date, datetime
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from pydantic import BaseModel
 from app.api.deps import get_db
 from app.models.expense import Expense
-from app.models.inventory import Inventory,ItemCategory, StorageLocation
+from app.models.inventory import Inventory, InventoryBatch, InventoryTransaction,ItemCategory, StorageLocation, TransactionType
 from app.models.users import User
-from app.schemas.inventory import InventoryListResponse, InventoryOut, InventoryResponse,InventoryUpdate,InventoryItemCreate,ItemPerishableNonPerishable,ItemCategoryCreate,ItemCategoryResponse,ItemCategoryUpdate
+from app.schemas.batch import BatchCreate
+from app.schemas.inventory import InventoryListResponse, InventoryOut, InventoryResponse,InventoryUpdate,InventoryItemCreate, ItemCategoryOut,ItemPerishableNonPerishable,ItemCategoryCreate,ItemCategoryUpdate,ItemCategoryResponse
 from app.services.inventory_service import InventoryService
 from app.schemas.inventory_storage import StorageLocationCreate,StorageLocationUpdate,StorageLocationResponse
-from app.utils.auth_helper import get_current_user
+from app.utils.auth_helper import get_current_user,get_tanant_scope
+from app.schemas.common import ApiResponse
+from app.utils.inventory_batch_helper import calculate_days_until_expiry, determine_lifecycle_stage, generate_batch_number_sequential
+from app.utils.response_helper import success_response
+from app.tasks import update_batch_lifecycles_status
 
 router = APIRouter()
 
@@ -85,10 +90,12 @@ def add_item(
             )
         
         inventory_item = Inventory(
+            user_id = current_user.id,
             tenant_id=current_user.tenant_id,
             storage_location_id=item.storage_location_id,
             item_category_id=item.item_category_id,
             name=item.name,
+            sku=item.sku,
             quantity=item.quantity,
             unit=item.unit,
             price_per_unit=price_per_unit,
@@ -121,18 +128,20 @@ def add_item(
             "data": inventory_item,
         }
     
-    except HTTPException:
+    except HTTPException as e:
+        print(e,"PRINT")
         db.rollback()
         raise
 
-    except Exception:
+    except Exception as e:
         db.rollback()
+        print("ERROR",e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to add inventory item",
         )
     
-@router.get("/", response_model=List[InventoryOut])
+@router.get("/", response_model=InventoryListResponse)
 def get_all_inventory(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -145,10 +154,7 @@ def get_all_inventory(
         )
     
     try:
-       service = InventoryService(db)
-       inventory = service.get_all_items(
-           tenant_id=current_user.tenant_id
-       )
+       inventory =( db.query(Inventory).filter(Inventory.tenant_id == current_user.tenant_id).all())
 
        return {
             "success": True,
@@ -158,7 +164,8 @@ def get_all_inventory(
     except HTTPException:
         raise
 
-    except Exception:
+    except Exception as e:
+        print("GET INVENTORY", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch inventory",
@@ -369,18 +376,23 @@ def delete_all_inventory(
 
 
 #ITEM-CATEGORIES API'S
-@router.post("/add-item-category",response_model=ItemCategoryResponse,status_code=status.HTTP_201_CREATED)
+@router.post("/add-item-category",response_model=ApiResponse[ItemCategoryOut])
 def create_item_category(
     data: ItemCategoryCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 
 ):
-    if not current_user.tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant access required",
-        )
+    # if not current_user.tenant_id:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="Tenant access required",
+    #     )
+
+    tenant_id = get_tanant_scope(
+        current_user=current_user,
+        requested_tenant_id=data.tenant_id
+)
     
     try:
         category_type_enum = ItemPerishableNonPerishable(data.category_type)
@@ -390,9 +402,12 @@ def create_item_category(
             detail=f"Invalid category_type: {data.category_type}",
         )
     
+    print(f"DEBUG - Enum name: {category_type_enum.name}")  # Should print "PERISHABLE"
+    print(f"DEBUG - Enum value: {category_type_enum.value}")  
+    
     existing =( db.query(ItemCategory).filter(
         ItemCategory.name == data.name,
-        ItemCategory.tenant_id == current_user.tenant_id,
+        ItemCategory.tenant_id == tenant_id,
     ).first() )
 
     if existing:
@@ -403,20 +418,21 @@ def create_item_category(
     try:
         
         category = ItemCategory(
-            tenant_id=current_user.tenant_id,
+            tenant_id=tenant_id,
             name=data.name,
-            category_type=category_type_enum
+            category_type=category_type_enum.value,
+            user_id=current_user.id
         )
 
         db.add(category)
         db.commit()
         db.refresh(category)
 
-        return {
-                "success": True,
-                "message": "Item category created successfully",
-                "data": category,
-            }
+        return success_response(
+        data=category,
+        message="Item category created successfully",
+        status_code=status.HTTP_201_CREATED,
+    )
     
     except Exception:
         db.rollback()
@@ -630,6 +646,11 @@ def add_storage_location(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+
+    tenant_id = get_tanant_scope(
+        current_user=current_user,
+        requested_tenant_id=data.tenant_id  # only required for SUPER_ADMIN
+    )
     try:
 
         existing = db.query(StorageLocation).filter(
@@ -645,7 +666,8 @@ def add_storage_location(
             )
         
         location = StorageLocation(
-            tenant_id=current_user.tenant_id,
+            tenant_id=tenant_id,
+            user_id=current_user.id,
             name=data.name,
             storage_temp_min=data.storage_temp_min,
             storage_temp_max=data.storage_temp_max,
@@ -656,11 +678,15 @@ def add_storage_location(
         db.commit()
         db.refresh(location)
 
+        result = update_batch_lifecycles_status.delay()
+
+
         return {
             "data": {
                 "status": status.HTTP_201_CREATED,
                 "message": "Storage location added successfully!",
-                "location": location
+                "location": location,
+                "result": result.id
             }
         }
     
@@ -842,3 +868,108 @@ def delete_location(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete storage location"
         )
+    
+#INVENTORY BATCH API's
+@router.post("/items/{item_id}/batches")
+def create_batch(
+    item_id: int,
+    batch_data: BatchCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+
+        item = (db.query(Inventory).filter(Inventory.id == item_id).filter(Inventory.tenant_id ==current_user.tenant_id).first())
+        print(item,"ITEMMMMM")
+
+        if not item:
+            raise HTTPException(status_code=404, detail="Item not found")
+        
+        if not batch_data.quantity_received:
+               raise HTTPException(status_code=400, detail="quantity_received is required")
+
+        if not batch_data.unit_cost:
+                raise HTTPException(status_code=400, detail="unit_cost is required")
+
+        if not batch_data.expiry_date:
+                raise HTTPException(status_code=400, detail="expiry_date is required")
+
+        
+        # if not item.is_perishable:
+        #     raise HTTPException(
+        #         status_code=400, 
+        #         detail="This item is not marked as perishable"
+        #     )
+
+        # existing_batch = db.query(InventoryBatch)\
+        #     .filter(InventoryBatch.inventory_item_id == item_id)\
+        #     .filter(InventoryBatch.batch_number == batch_data.batch_number)\
+        #     .first()
+        
+        days_until_expiry = calculate_days_until_expiry(batch_data.expiry_date)
+        lifecycle = determine_lifecycle_stage(
+            days_until_expiry,
+            item.fresh_threshold_days or 3,
+            item.near_expiry_threshold_days or 1
+        )
+
+        batch_number = generate_batch_number_sequential(
+        item_id=item_id,
+        db=db,
+        prefix="BATCH"
+        )
+
+        batch = InventoryBatch(
+                user_id=current_user.id,
+                tenant_id=current_user.tenant_id,
+                inventory_item_id=item_id,
+                batch_number=batch_number,
+                expiry_date=batch_data.expiry_date,
+                quantity_received=batch_data.quantity_received,
+                quantity_remaining=batch_data.quantity_received,
+                packets=batch_data.packets,
+                pieces=batch_data.pieces,
+                total_pieces=batch_data.total_pieces,
+                price_per_packet=batch_data.price_per_packet,
+                price_per_piece=batch_data.price_per_piece,
+                unit_cost=batch_data.unit_cost,
+                lifecycle_stage=lifecycle,
+                is_active=True
+            )
+
+        db.add(batch)
+        db.flush()  # assigns batch.id
+
+        transaction = InventoryTransaction(
+                tenant_id=current_user.tenant_id,
+                # branch_id=item.branch_id,
+                inventory_item_id=item_id,
+                batch_id=batch.id,
+                transaction_type=TransactionType.PURCHASE,
+                quantity=batch_data.quantity_received,
+                unit_cost=batch_data.unit_cost,
+                total_value=batch_data.quantity_received * batch_data.unit_cost,
+                reference_id=f"Batch {batch_data.batch_number} received"
+            )
+
+        db.add(transaction)
+
+        db.commit()
+
+        return {
+            "success": True,
+            "message": "Batch created successfully",
+            "batch_id": batch.id,
+            "lifecycle_stage": lifecycle.value,
+            "days_until_expiry": days_until_expiry
+        }
+      
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("PRINTTT", e)
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+

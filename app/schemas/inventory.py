@@ -1,8 +1,9 @@
 # app/schemas/inventory.py
 from pydantic import BaseModel , Field
 from datetime import date, datetime
-from typing import List, Optional
+from typing import List, Optional, Literal
 from enum import Enum
+from uuid import UUID
 class InventoryBase(BaseModel):
     name: str
     quantity: float
@@ -19,20 +20,22 @@ class InventoryBase(BaseModel):
     date_added: Optional[datetime] = None
 
 class InventoryItemCreate(BaseModel):
+    sku: Optional[str] = None
     name: str
     quantity: float
     unit: str
     item_category_id: int
     storage_location_id: int
-    price_per_unit: float
-    total_cost: float
+
+    price_per_unit: Optional[float] = None
+    total_cost: Optional[float] = None
+    current_quantity:Optional[float] = 0.0
     purchase_unit: str
     purchase_unit_size: int
     type: Optional[str] = ""
-    expiry_life: Optional[date] = None
+    expiry_date: Optional[date] = None
     shelf_life_in_days: Optional[int] = Field(None, ge=0)
     date_added: Optional[datetime] = None
-    
 class InventoryRead(InventoryBase):
     id: int
     date_added: datetime
@@ -102,7 +105,8 @@ class InventoryResponse(BaseModel):
 class InventoryListResponse(BaseModel):
     success: bool
     message: str
-    data: List[InventoryOut]       
+    data: List[InventoryOut]     
+
 
 
 # class InventorySearch(BaseModel):
@@ -117,17 +121,26 @@ class ItemPerishableNonPerishable(str,Enum):
 
 class ItemCategoryCreate(BaseModel):
     name: str
-    category_type: ItemPerishableNonPerishable 
+    category_type: str 
+    tenant_id : UUID | None = None
+    user_id : int
 
 class ItemCategoryUpdate(BaseModel):
     name: Optional[str] = None
     category_type: Optional[ItemPerishableNonPerishable] = None
 
-class ItemCategoryResponse(BaseModel):
+class ItemCategoryOut(BaseModel):
     id: int
     name: str
-    category_type: ItemPerishableNonPerishable
+    category_type: str
 
     class Config:
-        from_attributes  = True             
+        from_attributes  = True  
+class ItemCategoryResponse(BaseModel):
+    success: bool
+    status_code: int
+    message: str
+    data: ItemCategoryOut
+
+               
 

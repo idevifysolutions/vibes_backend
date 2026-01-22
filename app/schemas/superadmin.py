@@ -17,14 +17,13 @@ class LoginRequest(BaseModel):
     password: str
 
 class LoginData(BaseModel):
-    status: int
-    message: str
     access_token: str
     token_type: str = "bearer"
     role: str    
 
-class LoginResponse(BaseModel):
-    data: LoginData  
+
+# class LoginResponse(BaseModel):
+#     data: LoginData  
 
 class TokenResponse(BaseModel):
     access_token:str
