@@ -1,0 +1,134 @@
+version: "3.9"
+
+# services:
+#   db:
+#     image: postgres:15
+#     environment:
+#       POSTGRES_USER: postgres
+#       POSTGRES_PASSWORD: password
+#       POSTGRES_DB: vibes_local_db
+#     volumes:
+#       - postgres_data:/var/lib/postgresql/data
+#     ports:
+#       - "5432:5432"
+
+#   # redis:
+#   #   image: redis:7
+#   #   ports:
+#   #     - "6379:6379"
+
+#   api:
+#     build: .
+#     command: >
+#       sh -c "
+#       alembic upgrade head &&
+#       uvicorn app.main:app --host 0.0.0.0 --port 8000
+#       "
+#     volumes:
+#       - .:/app
+#     depends_on:
+#       - db
+#       # - redis
+#     ports:
+#       - "8000:8000"
+#     environment:
+#       DATABASE_URL:  postgresql://postgres:password@db:5432/vibes_local_db
+#       # CELERY_BROKER_URL: redis://redis:6379/0
+#       # CELERY_RESULT_BACKEND: redis://redis:6379/1
+
+#   # celery_worker:
+#   #   build: .
+#   #   command: celery -A app.core.celery_app worker --loglevel=info
+#   #   depends_on:
+#   #     - db
+#   #     - redis
+#   #   environment:
+#   #     DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/inventory_db
+#   #     CELERY_BROKER_URL: redis://redis:6379/0
+#   #     CELERY_RESULT_BACKEND: redis://redis:6379/1
+
+#   # celery_beat:
+#   #   build: .
+#   #   command: celery -A app.core.celery_app beat --loglevel=info
+#   #   depends_on:
+#   #     - db
+#   #     - redis
+#   #   environment:
+#   #     CELERY_BROKER_URL: redis://redis:6379/0
+
+# volumes:
+#   postgres_data:
+
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: >
+      sh -c "
+      alembic upgrade head &&
+      uvicorn app.main:app 
+      --host 0.0.0.0 
+      --port 8000
+      --reload
+      "
+    environment:
+      DATABASE_URL: postgresql://postgres:password@db:5432/vibes_local_db  
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    env_file:
+      - env/.env.local
+    depends_on:
+      - db
+      # - redis
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: vibes_local_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  celery_worker:
+    build:
+       context: .
+       dockerfile: Dockerfile
+    command: celery -A app.celery_app worker --loglevel=info
+    volumes: 
+       - .:/app
+    env_file:
+      - env/.env.local
+    depends_on:
+     - db
+     - redis   
+
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A app.celery_app beat --loglevel=info
+    volumes:
+      - .:/app
+    env_file:
+      - env/.env.local
+    depends_on:
+      - db
+      - redis
+      - celery_worker     
+      
+volumes:
+  postgres_data:
+
+

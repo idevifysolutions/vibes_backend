@@ -4,7 +4,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
 import enum
 from datetime import datetime
-
+from sqlalchemy.orm import relationship
 
 class SubscriptionTier(enum.Enum):
     basic = "basic"
@@ -35,3 +35,5 @@ class Tenant(Base):
 
     created_at = Column(TIMESTAMP, default=datetime.utcnow)
     updated_at = Column(TIMESTAMP, default=datetime.utcnow)
+
+    users = relationship("User",back_populates="tenant",cascade="all, delete-orphan")
