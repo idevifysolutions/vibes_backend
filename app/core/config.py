@@ -1,11 +1,11 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from typing import List, Optional
 
 
 class Settings(BaseSettings):
     # CORS
-    CORS_ORIGINS: List[str] = []
+    CORS_ORIGINS: List[str] = Field(default_factory=list)
 
     LOG_LEVEL: str = "INFO"  
     DEBUG: bool = True
