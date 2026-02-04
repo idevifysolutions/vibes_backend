@@ -10,24 +10,22 @@ logger = logging.getLogger(__name__)
 
 
 def calculate_days_until_expiry(expiry_date: datetime) -> int:
-    return (expiry_date - datetime.now().date()).days
-
+    today = datetime.utcnow().date()
+    expiry = expiry_date.date() if hasattr(expiry_date,"date") else expiry_date
+    return (expiry - today).days
 
 def find_lifecycle_stage(
     days_until_expiry: int,
     fresh_threshold: int,
-    near_expiry_threshold: int    
 ) -> str:
     if days_until_expiry < 0:
-        return "expired"
-    elif days_until_expiry <= near_expiry_threshold:
-        return "near_expiry"
+        return "EXPIRED"
     elif days_until_expiry <= fresh_threshold:
-        return "aging"
+        return "NEAR_EXPIRY"
     else:
-        return "fresh" 
+        return "FRESH" 
     
-def update_batch_lifecycle(batch, item, db):
+def update_batch_lifecycle(batch:InventoryBatch, item:Inventory, db:Session):
     if not batch.expiry_date:
         return
     
@@ -37,7 +35,6 @@ def update_batch_lifecycle(batch, item, db):
     batch.lifecycle_stage = find_lifecycle_stage(
         days_until_expiry,
         item.fresh_threshold_days or 3,
-        item.near_expiry_threshold_days or 1
     )
 
     if old_stage != batch.lifecycle_stage:

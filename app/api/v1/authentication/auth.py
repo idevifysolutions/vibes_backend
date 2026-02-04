@@ -191,7 +191,8 @@ def superadmin_login(
         # Re-raise known FastAPI errors
         raise
 
-    except SQLAlchemyError:
+    except SQLAlchemyError as e:
+        print(e,"PERINT")
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
