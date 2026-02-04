@@ -60,21 +60,21 @@ class Inventory(TenantMixin,Base):
     
     id = Column(Integer, primary_key=True, index=True)
     storage_location_id = Column(Integer, ForeignKey("storage_locations.id"),nullable=True)
-    item_category_id = Column(Integer,ForeignKey("item_categories.id"),nullable=False)
-    user_id = Column(Integer,ForeignKey("users.id"),nullable=False)
-    name = Column(String, index=True, nullable=False)
-    sku = Column(String(100), unique=True ,nullable=False)
-    quantity = Column(Float, nullable=False)
+    item_category_id = Column(Integer,ForeignKey("item_categories.id"),nullable=True)
+    user_id = Column(Integer,ForeignKey("users.id"),nullable=True)
+    name = Column(String, index=True, nullable=True)
+    sku = Column(String(100), unique=True ,nullable=True)
+    quantity = Column(Float, nullable=True)
     unit = Column(
         Enum(
             UnitType,
             name="unittype",
             values_callable=lambda enum: [e.value for e in enum],
         ),
-        nullable=False,
+        nullable=True,
     )
-    price_per_unit = Column(Float, nullable=False)
-    total_cost = Column(Float, nullable=False)
+    price_per_unit = Column(Float, nullable=True)
+    total_cost = Column(Float, nullable=True)
     type = Column(String, default="")
     expiry_date = Column(Date)
     purchase_unit =  Column(
@@ -87,7 +87,7 @@ class Inventory(TenantMixin,Base):
     )
     purchase_unit_size = Column(Integer, nullable=True)
     shelf_life_in_days = Column(Integer)
-    reorder_point = Column(Numeric(12, 3), nullable=False)
+    reorder_point = Column(Numeric(12, 3), nullable=True)
     reorder_quantity = Column(Numeric(12, 3),nullable=True)
     unit_cost = Column(Numeric(10, 2),nullable=True)
     expiry_alert_threshold_days = Column(Integer, default=3)
@@ -95,7 +95,7 @@ class Inventory(TenantMixin,Base):
     near_expiry_threshold_days = Column(Integer, default=1)
     current_quantity = Column(Numeric(12, 3), default=0)
     is_active = Column(Boolean,default=True)
-    date_added = Column(DateTime, default=datetime.utcnow, nullable=False)
+    date_added = Column(DateTime, default=datetime.utcnow, nullable=True)
     updated_at = Column(DateTime, server_default=func.now(),onupdate=func.now(),default=datetime.utcnow)
 
     storage_location = relationship("StorageLocation")
@@ -120,9 +120,9 @@ class InventoryBatch(TenantMixin,Base):
     __tablename__ = "inventory_batches"
     
     id = Column(Integer, primary_key=True, index=True)
-    inventory_item_id = Column(Integer, ForeignKey("inventory.id", ondelete="CASCADE"), nullable=False)
-    user_id = Column(Integer,ForeignKey("users.id"),nullable=False)
-    batch_number = Column(String(100), nullable=False)
+    inventory_item_id = Column(Integer, ForeignKey("inventory.id", ondelete="CASCADE"), nullable=True)
+    user_id = Column(Integer,ForeignKey("users.id"),nullable=True)
+    batch_number = Column(String(100), nullable=True)
     expiry_date = Column(Date)
     unit = Column(
         Enum(
@@ -132,7 +132,7 @@ class InventoryBatch(TenantMixin,Base):
             validate_strings=True,
             values_callable=lambda x: [e.value for e in x],
         ),
-        nullable=False,
+        nullable=True,
     )
     quantity_received = Column(Numeric(12, 3), nullable=True)
     quantity_remaining = Column(Numeric(12, 3), nullable=True)
@@ -162,10 +162,10 @@ class PreparedMaterial(TenantMixin,Base):
     __tablename__ = "pre_preparedmaterial"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer,ForeignKey("users.id"),nullable=False)
-    inventory_item_id = Column(Integer, ForeignKey("inventory.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer,ForeignKey("users.id"),nullable=True)
+    inventory_item_id = Column(Integer, ForeignKey("inventory.id", ondelete="CASCADE"), nullable=True)
     storage_location_id = Column(Integer,ForeignKey("storage_locations.id", ondelete="CASCADE"),nullable=True)
-    name = Column(String,index=True,nullable=False)
+    name = Column(String,index=True,nullable=True)
 
     inventory_item = relationship("Inventory")
     user = relationship("User")
@@ -174,8 +174,8 @@ class StorageLocation(TenantMixin,Base):
     __tablename__ = "storage_locations"
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer,ForeignKey("users.id"),nullable=False)
-    name = Column(String(100), nullable=False)
+    user_id = Column(Integer,ForeignKey("users.id"),nullable=True)
+    name = Column(String(100), nullable=True)
     storage_temp_min = Column(Numeric(5, 2))
     storage_temp_max = Column(Numeric(5, 2))
     special_handling_instructions = Column(Text)
@@ -186,9 +186,9 @@ class ItemCategory(TenantMixin,Base):
     __tablename__ = "item_categories"
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer,ForeignKey("users.id"),nullable=False)
-    name = Column(String(100), nullable=False)
-    category_type = Column(Enum(ItemPerishableNonPerishable, name="item_category_type"), nullable=False)
+    user_id = Column(Integer,ForeignKey("users.id"),nullable=True)
+    name = Column(String(100), nullable=True)
+    category_type = Column(Enum(ItemPerishableNonPerishable, name="item_category_type"), nullable=True)
 
     inventory_items = relationship("Inventory", back_populates="item_category" ,cascade="all,delete-orphan")
     user = relationship("User")
@@ -196,11 +196,11 @@ class InventoryTransaction(TenantMixin, Base):
     __tablename__ = "inventory_transactions"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    inventory_item_id = Column(Integer, ForeignKey("inventory.id", ondelete="CASCADE"), nullable=False)
+    inventory_item_id = Column(Integer, ForeignKey("inventory.id", ondelete="CASCADE"), nullable=True)
     batch_id = Column(Integer, ForeignKey("inventory_batches.id", ondelete="SET NULL"))
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
-    transaction_type = Column(Enum(TransactionType), nullable=False)
-    quantity = Column(Numeric(12, 3), nullable=False)
+    transaction_type = Column(Enum(TransactionType), nullable=True)
+    quantity = Column(Numeric(12, 3), nullable=True)
     unit_cost = Column(Numeric(10, 2))
     total_value = Column(Numeric(12, 2))
     reference_id = Column(String(100))
@@ -220,7 +220,7 @@ class InventoryAlert(TenantMixin,Base):
     __tablename__ = "inventory_alert"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    inventory_item_id = Column(Integer, ForeignKey("inventory.id", ondelete="CASCADE"), nullable=False)
+    inventory_item_id = Column(Integer, ForeignKey("inventory.id", ondelete="CASCADE"), nullable=True)
     batch_id = Column(Integer, ForeignKey("inventory_batches.id", ondelete="SET NULL"))
     alert_type = Column(
         AlertTypeEnum,
@@ -228,7 +228,7 @@ class InventoryAlert(TenantMixin,Base):
     )
     status = Column(AlertStatusEnum, default=AlertStatus.ACTIVE)
     priority = Column(String(20), default="medium")
-    message = Column(Text, nullable=False)
+    message = Column(Text, nullable=True)
     current_quantity = Column(Numeric(12, 3))
     threshold_value = Column(Numeric(12, 3))
     suggested_action = Column(Text)

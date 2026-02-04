@@ -90,11 +90,11 @@ class DishSale(TenantMixin, Base):
     __tablename__ = "dish_sales"
 
     id= Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    dish_id = Column(Integer, ForeignKey("dishes.id", ondelete="CASCADE"), nullable=False)
-    quantity_sold = Column(Numeric(8, 2), nullable=False)
+    dish_id = Column(Integer, ForeignKey("dishes.id", ondelete="CASCADE"), nullable=True)
+    quantity_sold = Column(Numeric(8, 2), nullable=True)
     unit_price = Column(Numeric(10, 2))
     total_amount = Column(Numeric(12, 2))
-    order_source = Column(Enum(OrderSource), nullable=False)
+    order_source = Column(Enum(OrderSource), nullable=True)
     order_reference = Column(String(100))
     sale_date = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -105,8 +105,8 @@ class DishPreparationBatch(TenantMixin,Base):
     __tablename__ = "dish_preparation_batches"
 
     id = Column(Integer,primary_key=True, index=True)
-    batch_number = Column(String(100),unique=True, nullable=False, index=True)
-    user_id = Column(Integer,ForeignKey("users.id"),nullable=False)
+    batch_number = Column(String(100),unique=True, nullable=True, index=True)
+    user_id = Column(Integer,ForeignKey("users.id"),nullable=True)
     status = Column(Enum(PreparationBatchStatus), default=PreparationBatchStatus.IN_PROGRESS)
     total_dishes_planned = Column(Integer, default=0)
     total_dishes_completed = Column(Integer,default=0)
@@ -124,10 +124,10 @@ class DishPreparationBatchLog(TenantMixin, Base):  #dishpreparationlogs table
     __tablename__ = "dish_preparation_batch_logs"
     
     id = Column(Integer, primary_key=True, index=True)
-    dish_id = Column(Integer, ForeignKey("dishes.id", ondelete="CASCADE"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    dish_id = Column(Integer, ForeignKey("dishes.id", ondelete="CASCADE"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     batch_id = Column(Integer, ForeignKey("dish_preparation_batches.id", ondelete="CASCADE"), nullable=True, index=True)
-    quantity_prepared = Column(Integer, nullable=False)
+    quantity_prepared = Column(Integer, nullable=True)
     track_status =  Column(Enum(PreparationBatchStatus), default=PreparationBatchStatus.IN_PROGRESS)
     preparation_date = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
@@ -146,14 +146,14 @@ class PreparationIngredientHistory(TenantMixin, Base):
     __tablename__ = "preparation_ingredient_history"
     
     id = Column(Integer, primary_key=True, index=True)
-    preparation_log_id = Column(Integer, ForeignKey("dish_preparation_batch_logs.id", ondelete="CASCADE"), nullable=False)
+    preparation_log_id = Column(Integer, ForeignKey("dish_preparation_batch_logs.id", ondelete="CASCADE"), nullable=True)
     ingredient_id = Column(Integer, ForeignKey("inventory.id"), nullable=True)
     batch_id = Column(Integer, ForeignKey("inventory_batches.id"), nullable=True)
-    ingredient_name = Column(String, nullable=False)
+    ingredient_name = Column(String, nullable=True)
     preprepred_material_id = Column(UUID, ForeignKey("pre_prepared_dish_preparation.id"), nullable=True)
     batch_number = Column(String(100), nullable=True)
-    quantity_consumed = Column(Numeric(12, 3), nullable=False)
-    unit = Column(String, nullable=False)
+    quantity_consumed = Column(Numeric(12, 3), nullable=True)
+    unit = Column(String, nullable=True)
     cost_per_unit = Column(Numeric(10, 2), default=0)
     total_cost = Column(Numeric(10, 2), default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -166,9 +166,9 @@ class PrePreparedMaterial(TenantMixin, Base):
     __tablename__ = "pre_prepared_dish_preparation"
 
     id= Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String(255),nullable=False, index=True)
+    name = Column(String(255),nullable=True, index=True)
     storage_location_id = Column(Integer,ForeignKey("storage_locations.id", ondelete="CASCADE"),nullable=True)
-    product_type = Column(Enum(PrePreparedProductType),nullable=False) 
+    product_type = Column(Enum(PrePreparedProductType),nullable=True) 
     description = Column(Text, nullable=True)
     unit = Column(String(20), default="gm")
     shelf_life_hours = Column(Integer, nullable=True)
@@ -188,11 +188,11 @@ class IngredientForPrePreparedIngredients(TenantMixin, Base):
     __tablename__ = "ingredients_for_pre_prepared_ingredients"
     
     id = Column(Integer, primary_key=True, index=True)
-    semi_finished_product_id = Column(UUID, ForeignKey("pre_prepared_dish_preparation.id", ondelete="CASCADE"), nullable=False)
-    ingredient_id = Column(Integer, ForeignKey("inventory.id"), nullable=False)
+    semi_finished_product_id = Column(UUID, ForeignKey("pre_prepared_dish_preparation.id", ondelete="CASCADE"), nullable=True)
+    ingredient_id = Column(Integer, ForeignKey("inventory.id"), nullable=True)
     inventory_transaction_id = Column(UUID(as_uuid=True), ForeignKey("inventory_transactions.id", ondelete="CASCADE"), nullable=True)
-    quantity_required = Column(Numeric(12, 3), nullable=False)
-    ingredient_name = Column(String(255), nullable=False)
+    quantity_required = Column(Numeric(12, 3), nullable=True)
+    ingredient_name = Column(String(255), nullable=True)
     unit = Column(String(20), default="gm")
     cost_per_unit = Column(Numeric(10, 2), default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -205,14 +205,14 @@ class PrePreparedMaterialStock(TenantMixin, Base):
     __tablename__ = "pre_prepared_material_stock"
     
     id = Column(Integer, primary_key=True, index=True)
-    product_id = Column(UUID(as_uuid=True), ForeignKey("pre_prepared_dish_preparation.id", ondelete="CASCADE"), nullable=False)
-    batch_number = Column(String(100), nullable=False, index=True)
-    quantity_produced = Column(Numeric(12, 3), nullable=False)
-    quantity_remaining = Column(Numeric(12, 3), nullable=False)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("pre_prepared_dish_preparation.id", ondelete="CASCADE"), nullable=True)
+    batch_number = Column(String(100), nullable=True, index=True)
+    quantity_produced = Column(Numeric(12, 3), nullable=True)
+    quantity_remaining = Column(Numeric(12, 3), nullable=True)
     unit = Column(String(20), default="gm")
     production_date = Column(DateTime(timezone=True), server_default=func.now())
     expiry_date = Column(DateTime(timezone=True), nullable=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     preparation_log_id = Column(Integer, nullable=True)
     total_cost = Column(Numeric(12, 2), default=0)
     is_active = Column(Boolean, default=True)

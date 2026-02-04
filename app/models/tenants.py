@@ -22,7 +22,7 @@ class Tenant(Base):
     __tablename__ = "tenants"
 
     tenant_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_name = Column(String(200), nullable=False)
+    tenant_name = Column(String(200), nullable=True)
 
     subscription_tier = Column(Enum(SubscriptionTier), default=SubscriptionTier.basic)
     status = Column(Enum(TenantStatus), default=TenantStatus.active)

@@ -19,11 +19,11 @@ class User(TenantMixin,Base):
     __tablename__ = "users"
     
     id = Column(Integer, primary_key=True, index=True)
-    email = Column(String(255), unique=True, nullable=False, index=True)
-    mobile_no = Column(String(15), unique=True, nullable=False, index=True)
-    hashed_password = Column(String(255), nullable=False)
+    email = Column(String(255), unique=True, nullable=True, index=True)
+    mobile_no = Column(String(15), unique=True, nullable=True, index=True)
+    hashed_password = Column(String(255), nullable=True)
     full_name = Column(String(200))
-    role = Column(Enum(UserRole,values_callable=lambda enum:[e.value for e in enum],native_enum=False),nullable=False)
+    role = Column(Enum(UserRole,values_callable=lambda enum:[e.value for e in enum],native_enum=False),nullable=True)
     is_active = Column(Boolean, default=True)
     is_2fa_enabled = Column(Boolean, default=False)
     failed_login_attempts = Column(Integer, default=0)
@@ -47,8 +47,8 @@ class UserBranchAccess(TenantMixin, Base):
     __tablename__ = "user_branch_access"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    branch_id = Column(UUID(as_uuid=True), ForeignKey("branches.branch_id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    branch_id = Column(UUID(as_uuid=True), ForeignKey("branches.branch_id", ondelete="CASCADE"), nullable=True)
     can_read = Column(Boolean, default=True)
     can_create = Column(Boolean, default=False)
     can_update = Column(Boolean, default=False)
