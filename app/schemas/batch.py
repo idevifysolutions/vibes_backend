@@ -1,8 +1,15 @@
 from decimal import Decimal
+from enum import Enum
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date, timedelta
 
+class UnitType(str, Enum):
+    kg = "kg"
+    gm = "gm"
+    mg = "mg"
+    liter = "liter"
+    ml = "ml"
 class BatchCreate(BaseModel):
     expiry_date: date | None = None
     batch_number: Optional[str] = None
@@ -16,6 +23,7 @@ class BatchCreate(BaseModel):
     price_per_packet: float | None = None
     price_per_piece: float | None = None
     unit_cost: Decimal | None = None
+    unit: UnitType
     
     # batch_number: str
     # quantity_received: float

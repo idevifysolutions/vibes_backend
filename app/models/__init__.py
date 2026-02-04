@@ -1,7 +1,7 @@
 """Database models package"""
 from .tenants import Tenant
 from .inventory import Inventory,InventoryAlert,InventoryBatch,InventoryTransaction
-from .dish import Dish, DishType, DishIngredient,DishPreparation,DishSale
+from .dish import Dish, DishType, DishIngredient,DishSale
 from .expense import Expense
 from .logs import InventoryLog
 from .users import User,UserRole,UserBranchAccess

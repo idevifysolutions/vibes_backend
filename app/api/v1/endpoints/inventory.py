@@ -2,6 +2,7 @@
 app/api/v1/endpoints/inventory.py
 Inventory management endpoints
 """
+from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query , status
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -13,7 +14,7 @@ from app.models.expense import Expense
 from app.models.inventory import Inventory, InventoryBatch, InventoryTransaction,ItemCategory, StorageLocation, TransactionType
 from app.models.users import User
 from app.schemas.batch import BatchCreate
-from app.schemas.inventory import InventoryListResponse, InventoryOut, InventoryResponse,InventoryUpdate,InventoryItemCreate, ItemCategoryOut,ItemPerishableNonPerishable,ItemCategoryCreate,ItemCategoryUpdate,ItemCategoryResponse
+from app.schemas.inventory import InventoryListResponse, InventoryOut, InventoryResponse,InventoryUpdate,InventoryItemCreate, ItemCategoryListResponseAll, ItemCategoryOut,ItemPerishableNonPerishable,ItemCategoryCreate,ItemCategoryUpdate,ItemCategoryResponse
 from app.services.inventory_service import InventoryService
 from app.schemas.inventory_storage import StorageLocationCreate,StorageLocationUpdate,StorageLocationResponse
 from app.utils.auth_helper import get_current_user,get_tanant_scope
@@ -97,10 +98,13 @@ def add_item(
             name=item.name,
             sku=item.sku,
             quantity=item.quantity,
+            current_quantity=item.quantity,                     # ← added: initialize from quantity
             unit=item.unit,
             price_per_unit=price_per_unit,
+            unit_cost=price_per_unit,
             total_cost=total_cost,
             type=item.type or "",
+            reorder_point=item.reorder_point,
             expiry_date=item.expiry_date,
             purchase_unit=item.purchase_unit,
             purchase_unit_size=item.purchase_unit_size,
@@ -217,46 +221,6 @@ def search_inventory(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to search inventory",
-        )
-
-@router.get("/{item_id}", response_model=InventoryResponse,status_code=status.HTTP_200_OK)
-def get_inventory_item(
-    item_id: int, 
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    ):
-
-    if not current_user.tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant access required",
-        )
-    try:
-        service = InventoryService(db)
-        item = service.get_item_by_id(
-            item_id=item_id,
-            tenant_id=current_user.tenant_id,
-        )
-
-        if not item:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Inventory item not found",
-            )
-        
-        return {
-            "success": True,
-            "message": "Inventory item fetched successfully",
-            "data": item,
-        }
-
-    except HTTPException:
-        raise
-
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fetch inventory item",
         )
 
 @router.put("/{item_id}", response_model=InventoryResponse, status_code=status.HTTP_200_OK)
@@ -441,12 +405,12 @@ def create_item_category(
             detail="Failed to create item category",
         )
 
-@router.get("/get-item-categories",response_model=List[ItemCategoryResponse])
+@router.get("/get-item-categories")
 def list_item_categories(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-
+    print("HELLO")
     if not current_user.tenant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -455,22 +419,65 @@ def list_item_categories(
     try:
         categories = (
             db.query(ItemCategory)
-            .filter(ItemCategory.tenant_id == current_user.tenant_id)
+            # .filter(ItemCategory.tenant_id == current_user.tenant_id)
             .order_by(ItemCategory.name)
             .all()
-        )
+    )
+
 
         return {
-            "success": True,
-            "message": "Item categories fetched successfully",
-            "data": categories,
-        } 
+                "success": True,
+                "status_code": 200,
+                "message": "Item categories fetched successfully",
+                "data": categories
+            } 
      
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch item categories",
         )   
+
+
+@router.get("/{item_id}", response_model=InventoryResponse,status_code=status.HTTP_200_OK)
+def get_inventory_item(
+    item_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    ):
+
+    if not current_user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant access required",
+        )
+    try:
+        service = InventoryService(db)
+        item = service.get_item_by_id(
+            item_id=item_id,
+            tenant_id=current_user.tenant_id,
+        )
+
+        if not item:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Inventory item not found",
+            )
+        
+        return {
+            "success": True,
+            "message": "Inventory item fetched successfully",
+            "data": item,
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch inventory item",
+        )
 
 
 @router.get("/get-category-id/{category_id}",response_model=ItemCategoryResponse,status_code=status.HTTP_200_OK)
@@ -927,6 +934,7 @@ def create_batch(
                 expiry_date=batch_data.expiry_date,
                 quantity_received=batch_data.quantity_received,
                 quantity_remaining=batch_data.quantity_received,
+                unit=batch_data.unit,
                 packets=batch_data.packets,
                 pieces=batch_data.pieces,
                 total_pieces=batch_data.total_pieces,
@@ -939,6 +947,17 @@ def create_batch(
 
         db.add(batch)
         db.flush()  # assigns batch.id
+        
+        current_qty = Decimal(str(item.current_quantity)) if item.current_quantity else Decimal(0)
+        if item.expiry_date and item.expiry_date < date.today():
+            # Standalone is expired, reset to only this batch
+            print(f"{item.name} standalone stock expired on {item.expiry_date}, resetting quantity")
+            item.current_quantity = float(Decimal(str(batch_data.quantity_received)))
+        else:
+            # Standalone is fresh or no expiry, add to existing
+            item.current_quantity = float(current_qty + Decimal(str(batch_data.quantity_received)))
+        
+        item.unit_cost = batch_data.unit_cost
 
         transaction = InventoryTransaction(
                 tenant_id=current_user.tenant_id,
@@ -949,7 +968,7 @@ def create_batch(
                 quantity=batch_data.quantity_received,
                 unit_cost=batch_data.unit_cost,
                 total_value=batch_data.quantity_received * batch_data.unit_cost,
-                reference_id=f"Batch {batch_data.batch_number} received"
+                reference_id=f"Batch {batch.batch_number} received"
             )
 
         db.add(transaction)

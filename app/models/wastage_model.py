@@ -16,13 +16,16 @@ class WastageReason(PyEnum):
     STAFF_MEAL = "staff_meal"
     SAMPLING = "sampling"
     OTHER = "other"
-
-
 class WastageType(PyEnum):
     DISH = "dish"
     INVENTORY = "inventory"
-
-
+class ReportPeriod(PyEnum):
+    """Reporting period types"""
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
+    QUARTERLY = "quarterly"
+    YEARLY = "yearly"    
 class Wastage(TenantMixin,Base):
     __tablename__ = "wastage_management"
 

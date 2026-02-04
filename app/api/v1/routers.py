@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     inventory,
     dishes,
+    alerts,
     # preparation,
     # reports,
     # upload,
@@ -22,6 +23,8 @@ api_router.include_router(inventory.router,prefix="/inventory", tags=["inventory
 api_router.include_router( dishes.router, prefix="/dish",tags=["dish"])
 api_router.include_router( auth.router, prefix="/auth", tags=["Authentication"])
 api_router.include_router(tenant.router, prefix="/tenant",tags=["Tenant"])
+api_router.include_router(alerts.router, prefix="/alerts",tags=["Alert"])
+
 
 # api_router.include_router(
 #     preparation.router,

@@ -1,18 +1,26 @@
 # app/schemas/inventory.py
-from pydantic import BaseModel , Field
+from pydantic import BaseModel, ConfigDict , Field
 from datetime import date, datetime
 from typing import List, Optional, Literal
 from enum import Enum
 from uuid import UUID
+
+class UnitType(Enum):
+    KILOGRAM = "kg"
+    GRAM = "gm"
+    MILLIGRAM = "mg"
+    LITER = "liter"
+    MILLILITER = "ml"
+     
 class InventoryBase(BaseModel):
     name: str
     quantity: float
-    unit: str
+    unit: UnitType
     item_category_id: int
     storage_location_id: int
     price_per_unit: float
     total_cost: float
-    purchase_unit: str
+    purchase_unit: UnitType | None = None
     purchase_unit_size: int
     type: Optional[str] = ""
     expiry_life: Optional[date] = None
@@ -23,19 +31,24 @@ class InventoryItemCreate(BaseModel):
     sku: Optional[str] = None
     name: str
     quantity: float
-    unit: str
+    unit: UnitType
     item_category_id: int
     storage_location_id: int
 
     price_per_unit: Optional[float] = None
     total_cost: Optional[float] = None
     current_quantity:Optional[float] = 0.0
-    purchase_unit: str
+    purchase_unit: UnitType | None = None
     purchase_unit_size: int
     type: Optional[str] = ""
     expiry_date: Optional[date] = None
     shelf_life_in_days: Optional[int] = Field(None, ge=0)
     date_added: Optional[datetime] = None
+    reorder_point:Optional[float] = 0.0
+
+    model_config = ConfigDict(
+        use_enum_values=True
+    )
 class InventoryRead(InventoryBase):
     id: int
     date_added: datetime
@@ -46,7 +59,7 @@ class InventoryRead(InventoryBase):
 class InventoryUpdate(BaseModel):
     name: Optional[str] = None
     quantity: Optional[float] = None
-    unit: Optional[str] = None
+    unit: Optional[UnitType] = None 
     price_per_unit: Optional[float] = None
     total_cost: Optional[float] = None
     type: Optional[str] = None
@@ -88,7 +101,7 @@ class InventoryOut(InventoryBase):
     id: int
     name: str
     quantity: float
-    unit: str
+    unit: UnitType  
     price_per_unit: float
     total_cost: float
     date_added: datetime
@@ -142,5 +155,16 @@ class ItemCategoryResponse(BaseModel):
     message: str
     data: ItemCategoryOut
 
-               
+
+class ItemCategoryOutAll(BaseModel):
+    name: str
+    category_type: str
+
+    class Config:
+        from_attributes = True
+class ItemCategoryListResponseAll(BaseModel):
+    success: bool
+    status_code: int
+    message: str
+    data: list[ItemCategoryOutAll]
 
