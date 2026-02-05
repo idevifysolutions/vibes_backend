@@ -512,6 +512,7 @@ def get_item_category(
             "success": True,
             "message": "Item category fetched successfully",
             "data": category,
+            "status_code":status.HTTP_200_OK,
         }
    
     except HTTPException:
