@@ -340,7 +340,7 @@ def delete_all_inventory(
 
 
 #ITEM-CATEGORIES API'S
-@router.post("/add-item-category",response_model=ApiResponse[ItemCategoryOut])
+@router.post("/add-item-category",response_model=ItemCategoryResponse)
 def create_item_category(
     data: ItemCategoryCreate,
     db: Session = Depends(get_db),
@@ -395,7 +395,7 @@ def create_item_category(
         return success_response(
         data=category,
         message="Item category created successfully",
-        status_code=status.HTTP_201_CREATED,
+        # status_code=status.HTTP_201_CREATED,
     )
     
     except Exception:

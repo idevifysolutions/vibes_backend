@@ -7,6 +7,7 @@ from sqlalchemy.orm import relationship
 from app.db.mixins import TenantMixin
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
+from sqlalchemy import Enum as SQLAlchemyEnum
 
 class PerishableLifecycle(PyEnum):
     FRESH = "fresh"
@@ -188,8 +189,15 @@ class ItemCategory(TenantMixin,Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer,ForeignKey("users.id"),nullable=True)
     name = Column(String(100), nullable=True)
-    category_type = Column(Enum(ItemPerishableNonPerishable, name="item_category_type"), nullable=True)
-
+    category_type = Column(
+        SQLAlchemyEnum(
+            ItemPerishableNonPerishable,
+            name="item_category_type",
+            values_callable=lambda x: [e.value for e in x],  
+            native_enum=True,
+        ),
+        nullable=True
+    )
     inventory_items = relationship("Inventory", back_populates="item_category" ,cascade="all,delete-orphan")
     user = relationship("User")
 class InventoryTransaction(TenantMixin, Base):

@@ -138,6 +138,9 @@ class ItemCategoryCreate(BaseModel):
     tenant_id : UUID | None = None
     user_id : int
 
+    model_config = ConfigDict(use_enum_values=True)
+
+
 class ItemCategoryUpdate(BaseModel):
     name: Optional[str] = None
     category_type: Optional[ItemPerishableNonPerishable] = None
@@ -146,9 +149,10 @@ class ItemCategoryOut(BaseModel):
     id: int
     name: str
     category_type: str
-
-    class Config:
-        from_attributes  = True  
+    tenant_id: UUID  
+    user_id: Optional[int]  
+    
+    model_config = ConfigDict(from_attributes=True)
 class ItemCategoryResponse(BaseModel):
     success: bool
     status_code: int
