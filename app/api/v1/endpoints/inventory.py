@@ -656,7 +656,7 @@ def add_storage_location(
 
     tenant_id = get_tanant_scope(
         current_user=current_user,
-        requested_tenant_id=data.tenant_id  # only required for SUPER_ADMIN
+        requested_tenant_id=data.tenant_id  
     )
     try:
 
@@ -678,6 +678,7 @@ def add_storage_location(
             name=data.name,
             storage_temp_min=data.storage_temp_min,
             storage_temp_max=data.storage_temp_max,
+            special_handling_instructions=data.special_handling_instructions,
             is_active=True
         )
 

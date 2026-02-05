@@ -3,6 +3,8 @@ from typing import Optional
 from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy import Text
+
 class StorageLocationBase(BaseModel):
     name: str
     storage_temp_min: Optional[Decimal] = Field(
@@ -12,6 +14,7 @@ class StorageLocationBase(BaseModel):
         None, ge=-999.99, le=999.99
     )
     tenant_id: UUID | None = None
+    special_handling_instructions: Optional[str] = None
     
 class StorageLocationCreate(StorageLocationBase):
     pass
