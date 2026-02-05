@@ -1,6 +1,6 @@
 from app.celery_app import celery_app
 from app.db.session import SessionLocal
-from app.models.inventory import InventoryBatch,Inventory,ItemCategory
+from app.models.inventory import InventoryBatch,Inventory,ItemCategory, ItemPerishableNonPerishable
 from sqlalchemy.orm import Session
 from datetime import datetime,date
 import logging
@@ -48,30 +48,44 @@ def update_batch_lifecycle(batch:InventoryBatch, item:Inventory, db:Session):
 def update_batch_lifecycles_status():
     db = SessionLocal()
 
-    try: 
-        batches = db.query(InventoryBatch).join(Inventory).filter(
-            InventoryBatch.expiry_date.isnot(None),
-            ItemCategory.category_type == "PERISHABLE"
-        ).all()
+    try:
+        batches = (
+            db.query(InventoryBatch)
+            .join(Inventory)
+            .join(ItemCategory, Inventory.item_category_id == ItemCategory.id)
+            .filter(
+                InventoryBatch.expiry_date.isnot(None),
+                ItemCategory.category_type == ItemPerishableNonPerishable.PERISHABLE
+            )
+            .all()
+)
+
 
         updated_count = 0
+
         for batch in batches:
-            previous_batch = batch.lifecycle_stage
+            previous_stage = batch.lifecycle_stage
             update_batch_lifecycle(batch, batch.item, db)
 
-            if previous_batch != batch.lifecycle_stage:
+            if previous_stage != batch.lifecycle_stage:
                 updated_count += 1
 
-        logger.info(f"Batch lifecycle update completed. Updated {updated_count} batches.") 
+        db.commit()
+
+        logger.info(
+            f"Batch lifecycle update completed. "
+            f"Updated {updated_count}/{len(batches)} batches."
+        )
+
         return {
-            "status" : "success",
+            "status": "success",
             "total_batches": len(batches),
             "updated_batches": updated_count
-        }              
-    
+        }
+
     except Exception as e:
-        logger.error(f"Error updating batch lifecycles: {str(e)}")
         db.rollback()
+        logger.exception("Error updating batch lifecycles")
         raise
     finally:
         db.close()

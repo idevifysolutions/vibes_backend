@@ -19,8 +19,15 @@ class LoginRequest(BaseModel):
 class LoginData(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    role: str    
+    role: UserRole
+    tenant_id: Optional[UUID] = None
+    user_id: int
 
+class LoginResponse(BaseModel):
+    success: bool
+    status_code: int
+    message: str
+    data: LoginData
 
 # class LoginResponse(BaseModel):
 #     data: LoginData  

@@ -8,3 +8,5 @@ class ApiResponse(GenericModel, Generic[T]):
     status_code: int
     message: str
     data: Optional[T]
+    tenant_id: Optional[int]
+    user_id: int

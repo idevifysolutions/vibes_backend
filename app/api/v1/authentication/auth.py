@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.schemas.common import ApiResponse
-from app.schemas.superadmin import LoginData, SuperAdminCreate, TokenResponse,LoginRequest
+from app.schemas.superadmin import LoginData, LoginResponse, SuperAdminCreate, TokenResponse,LoginRequest
 from app.models import User, UserRole
 from app.api.deps import get_db
 from app.utils.auth_helper import create_access_token, validate_password,hash_password, verify_password
@@ -65,7 +65,9 @@ def create_super_admin(payload: SuperAdminCreate, db:Session = Depends(get_db)):
             "status": status.HTTP_201_CREATED,
         "message":"Super Admin created succesfully",
         "email":super_admin.email,
-        "role": super_admin.role
+        "role": super_admin.role,
+        "tenant_id":super_admin.tenant_id,
+        "user_id":super_admin.id
        }
     }
 
@@ -107,7 +109,7 @@ def create_super_admin(payload: SuperAdminCreate, db:Session = Depends(get_db)):
 #     return TokenResponse(access_token=access_token)
 
 # for swagger authentication
-@router.post("/login", response_model=ApiResponse[LoginData],status_code=status.HTTP_200_OK)
+@router.post("/login", response_model=LoginResponse,status_code=status.HTTP_200_OK)
 def superadmin_login(
     payload: LoginRequest,
     db: Session = Depends(get_db),
@@ -167,26 +169,25 @@ def superadmin_login(
             db.commit()
             
             access_token = create_access_token(
-                {
-                    "sub":str(user.id),
-                    "role":user.role.value,
-                    "tenant_id": str(user.tenant_id) if user.tenant_id else None,
-                    "type": "access",
-                }
+                data={
+            "sub": str(user.id),
+            "role": user.role,
+            "tenant_id": str(user.tenant_id) if user.tenant_id else None
+        }
             )
 
             return {
                 "success": True,
-                "status_code": status.HTTP_200_OK,
+                "status_code": 200,
                 "message": "Login successful",
                 "data": {
                     "access_token": access_token,
                     "token_type": "bearer",
-                    "role": user.role.value
-                    # "full_name":user.full_name,
-                    # "email":user.email
-               }
-            }
+                    "role": user.role,
+                    "tenant_id": user.tenant_id,
+                    "user_id": user.id
+                }
+    }
     except HTTPException:
         # Re-raise known FastAPI errors
         raise
