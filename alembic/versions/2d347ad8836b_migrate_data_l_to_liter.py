@@ -19,112 +19,24 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 
-def upgrade():
-    """
-    Now 'liter' exists in enum (from previous migration)
-    Safe to update data and remove 'L'
-    """
+def  upgrade() -> None:
+    # First, add the new enum value with COMMIT
+    op.execute("COMMIT")  # Commit previous transaction
+    op.execute("ALTER TYPE unittype ADD VALUE IF NOT EXISTS 'liter'")
+    op.execute("COMMIT")  # Commit the enum addition
     
-    # Step 1: Update data from 'L' to 'liter' (now safe)
+    # Now migrate the data
     op.execute("""
-        UPDATE inventory 
-        SET unit = 'liter' 
+        UPDATE inventory
+        SET unit = 'liter'
         WHERE unit = 'L'
     """)
-    
-    op.execute("""
-        UPDATE inventory 
-        SET purchase_unit = 'liter' 
-        WHERE purchase_unit = 'L'
-    """)
-    
-    # Step 2: Remove 'L' from enum by recreating it
-    # Create temp columns
-    op.execute("ALTER TABLE inventory ADD COLUMN unit_temp VARCHAR(50)")
-    op.execute("ALTER TABLE inventory ADD COLUMN purchase_unit_temp VARCHAR(50)")
-    
-    # Copy current values to temp
-    op.execute("""
-        UPDATE inventory 
-        SET unit_temp = unit::text,
-            purchase_unit_temp = purchase_unit::text
-    """)
-    
-    # Drop enum columns
-    op.execute("ALTER TABLE inventory DROP COLUMN unit")
-    op.execute("ALTER TABLE inventory DROP COLUMN purchase_unit")
-    
-    # Drop and recreate enum WITHOUT 'L'
-    op.execute("DROP TYPE unittype")
-    op.execute("""
-        CREATE TYPE unittype AS ENUM (
-            'kg', 'gm', 'mg', 
-            'liter', 'ml'
-        )
-    """)
-    
-    # Recreate columns with new enum
-    op.execute("ALTER TABLE inventory ADD COLUMN unit unittype")
-    op.execute("ALTER TABLE inventory ADD COLUMN purchase_unit unittype")
-    
-    # Copy values back from temp
-    op.execute("""
-        UPDATE inventory 
-        SET unit = unit_temp::unittype,
-            purchase_unit = purchase_unit_temp::unittype
-    """)
-    
-    # Set NOT NULL constraint
-    op.execute("ALTER TABLE inventory ALTER COLUMN unit SET NOT NULL")
-    op.execute("ALTER TABLE inventory ALTER COLUMN purchase_unit SET NOT NULL")
-    
-    # Drop temp columns
-    op.execute("ALTER TABLE inventory DROP COLUMN unit_temp")
-    op.execute("ALTER TABLE inventory DROP COLUMN purchase_unit_temp")
 
 
-def downgrade():
-    """Revert to 'L'"""
-    
-    # Add 'L' back to enum
-    op.execute("ALTER TYPE unittype ADD VALUE IF NOT EXISTS 'L'")
-    
-    # Update data back to 'L'
-    op.execute("UPDATE inventory SET unit = 'L' WHERE unit = 'liter'")
-    op.execute("UPDATE inventory SET purchase_unit = 'L' WHERE purchase_unit = 'liter'")
-    
-    # Recreate enum with 'L' instead of 'liter'
-    op.execute("ALTER TABLE inventory ADD COLUMN unit_temp VARCHAR(50)")
-    op.execute("ALTER TABLE inventory ADD COLUMN purchase_unit_temp VARCHAR(50)")
-    
+def downgrade() -> None:
+    # Migrate back
     op.execute("""
-        UPDATE inventory 
-        SET unit_temp = unit::text,
-            purchase_unit_temp = purchase_unit::text
+        UPDATE inventory
+        SET unit = 'L'
+        WHERE unit = 'liter'
     """)
-    
-    op.execute("ALTER TABLE inventory DROP COLUMN unit")
-    op.execute("ALTER TABLE inventory DROP COLUMN purchase_unit")
-    
-    op.execute("DROP TYPE unittype")
-    op.execute("""
-        CREATE TYPE unittype AS ENUM (
-            'kg', 'gm', 'mg', 
-            'L', 'ml'
-        )
-    """)
-    
-    op.execute("ALTER TABLE inventory ADD COLUMN unit unittype")
-    op.execute("ALTER TABLE inventory ADD COLUMN purchase_unit unittype")
-    
-    op.execute("""
-        UPDATE inventory 
-        SET unit = unit_temp::unittype,
-            purchase_unit = purchase_unit_temp::unittype
-    """)
-    
-    op.execute("ALTER TABLE inventory ALTER COLUMN unit SET NOT NULL")
-    op.execute("ALTER TABLE inventory ALTER COLUMN purchase_unit SET NOT NULL")
-    
-    op.execute("ALTER TABLE inventory DROP COLUMN unit_temp")
-    op.execute("ALTER TABLE inventory DROP COLUMN purchase_unit_temp")

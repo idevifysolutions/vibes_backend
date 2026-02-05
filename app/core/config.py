@@ -1,11 +1,12 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator
-from typing import List, Optional
+from typing import List, Optional, Union
 
 
 class Settings(BaseSettings):
     # CORS
-    CORS_ORIGINS: List[str] = Field(default_factory=list)
+    CORS_ORIGINS: Union[str, List[str]] = Field(default_factory=list)
+
 
     LOG_LEVEL: str = "INFO"  
     DEBUG: bool = True
@@ -37,6 +38,9 @@ class Settings(BaseSettings):
         Convert comma-separated string to list[str]
         """
         if isinstance(v, str):
+            # Remove surrounding quotes first
+            v = v.strip('"').strip("'")
+            # Then split by comma and filter empty strings
             return [x.strip() for x in v.split(",") if x.strip()]
         elif isinstance(v, list):
             return v
