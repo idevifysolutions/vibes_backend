@@ -24,7 +24,7 @@ class InventoryService:
         """Get all inventory items"""
         return self.db.query(Inventory).filter(Inventory.tenant_id == tenant_id).all()
     
-    def get_item_by_id(self, item_id: int) -> Optional[Inventory]:
+    def get_item_by_id(self, item_id: int,tenant_id: UUID) -> Optional[Inventory]:
         """Get inventory item by ID"""
         return self.db.query(Inventory).filter(Inventory.id == item_id, Inventory.tenant_id == tenant_id,
                 Inventory.is_active == True,).first()

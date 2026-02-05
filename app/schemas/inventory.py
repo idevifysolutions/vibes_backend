@@ -113,7 +113,7 @@ class InventoryOut(InventoryBase):
 class InventoryResponse(BaseModel):
     success: bool
     message: str
-    data: InventoryOut      
+    data: Optional[InventoryOut] = None    
 
 class InventoryListResponse(BaseModel):
     success: bool

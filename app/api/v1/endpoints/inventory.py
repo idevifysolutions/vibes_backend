@@ -30,7 +30,22 @@ class StorageLocationCreateResponse(BaseModel):
     message: str
     location: StorageLocationResponse
     
+class StorageLocationsListResponse(BaseModel):
+    data: list[StorageLocationResponse]
 
+class StorageLocationDetailResponse(BaseModel):
+    status: int
+    message: str
+    data: StorageLocationResponse  
+
+class StorageLocationUpdateResponse(BaseModel):
+    status: int
+    message: str
+    data: StorageLocationResponse
+class StorageLocationDeleteResponse(BaseModel):
+    status: int
+    message: str
+    data: StorageLocationResponse    
 #INVENTORY-ITEM API's
 @router.post("/add_item", response_model=InventoryResponse, status_code=status.HTTP_201_CREATED)
 def add_item(
@@ -158,7 +173,7 @@ def get_all_inventory(
         )
     
     try:
-       inventory =( db.query(Inventory).filter(Inventory.tenant_id == current_user.tenant_id).all())
+       inventory =( db.query(Inventory).filter(Inventory.tenant_id == current_user.tenant_id,Inventory.is_active == True).all())
 
        return {
             "success": True,
@@ -228,7 +243,7 @@ def update_inventory_item(
     item_id: int,
     item_update: InventoryUpdate,
     db: Session = Depends(get_db),
-    current_user : User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     if not current_user.tenant_id:
         raise HTTPException(
@@ -242,7 +257,7 @@ def update_inventory_item(
             item_id=item_id,
             tenant_id=current_user.tenant_id,
             item_update=item_update,
-            )
+        )
         
         if not updated_item:
             raise HTTPException(
@@ -256,61 +271,79 @@ def update_inventory_item(
             "message": "Inventory item updated successfully",
             "data": updated_item,
         }
-    except HTTPException as e:
-        return {
-            "success": False,
-            "status_code": e.status_code,
-            "message": e.detail,
-        }
-
+    
+    except HTTPException:
+        # Don't catch and return - just re-raise
+        raise
+    
+    except SQLAlchemyError:
+        db.rollback()
+        # Don't return dict - raise HTTPException
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update inventory item due to database error"
+        )
+    
     except Exception:
-        return {
-            "success": False,
-            "status_code": status.HTTP_500_INTERNAL_SERVER_ERROR,
-            "message": "Failed to update inventory item",
-        }
+        db.rollback()
+        # Don't return dict - raise HTTPException
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update inventory item"
+        )
 
 @router.delete("/{item_id}")
 def delete_inventory_item(
     item_id: int, 
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    ):
-
-    if not current_user.tenant_id:
-        return {
-            "success": False,
-            "status_code": status.HTTP_403_FORBIDDEN,
-            "message": "Tenant access required",
-        }
-
+):
     try:
-        service = InventoryService(db)
-        success = service.delete_item(
-            item_id=item_id,
-            tenant_id=current_user.tenant_id,
-        )
+        print(f"DELETE called for item_id: {item_id}")
+        print(f"Current user tenant_id: {current_user.tenant_id}")
+        
+        item = db.query(Inventory).filter(
+            Inventory.id == item_id,
+            Inventory.tenant_id == current_user.tenant_id
+        ).first()
 
-        if not success:
-            return {
-                "success": False,
-                "status_code": status.HTTP_404_NOT_FOUND,
-                "message": "Inventory item not found",
-            }
-
+        print(f"Item found: {item}") 
+        
+        if not item:
+            print("Item not found - raising 404")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Inventory item not found"
+            )
+        
+        item.is_active = False
+        db.commit()
+        db.refresh(item)
+        
         return {
             "success": True,
-            "status_code": status.HTTP_200_OK,
-            "message": "Inventory item deleted successfully",
+            "status_code": 200,
+            "message": "Inventory item deleted successfully"
         }
 
-    except Exception:
-        return {
-            "success": False,
-            "status_code": status.HTTP_500_INTERNAL_SERVER_ERROR,
-            "message": "Failed to delete inventory item",
-        }
-
+    except HTTPException:
+        raise
+        
+    except SQLAlchemyError as e:
+        db.rollback()
+        print(f"Database error during delete: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete inventory item due to database error"
+        )
+        
+    except Exception as e:
+        db.rollback()
+        print(f"Unexpected error during delete: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred while deleting inventory item"
+        )
 
 @router.delete("/")
 def delete_all_inventory(
@@ -439,18 +472,18 @@ def list_item_categories(
         )   
 
 
-@router.get("/{item_id}", response_model=InventoryResponse,status_code=status.HTTP_200_OK)
+@router.get("/{item_id}", response_model=InventoryResponse, status_code=status.HTTP_200_OK)
 def get_inventory_item(
     item_id: int, 
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    ):
-
+):
     if not current_user.tenant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Tenant access required",
         )
+    
     try:
         service = InventoryService(db)
         item = service.get_item_by_id(
@@ -459,10 +492,18 @@ def get_inventory_item(
         )
 
         if not item:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Inventory item not found",
-            )
+            # Option 1: Return empty data (if you want 200 OK with empty response)
+            return {
+                "success": False,
+                "message": "Inventory item not found",
+                "data": None,  # or [] if data should be a list
+            }
+            
+            # Option 2: Raise 404 (standard REST practice - uncomment if you prefer this)
+            # raise HTTPException(
+            #     status_code=status.HTTP_404_NOT_FOUND,
+            #     detail="Inventory item not found",
+            # )
         
         return {
             "success": True,
@@ -473,12 +514,17 @@ def get_inventory_item(
     except HTTPException:
         raise
 
-    except Exception:
+    except SQLAlchemyError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error while fetching inventory item",
+        )
+
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch inventory item",
         )
-
 
 @router.get("/get-category-id/{category_id}",response_model=ItemCategoryResponse,status_code=status.HTTP_200_OK)
 def get_item_category(
@@ -581,11 +627,12 @@ def update_item_category(
         db.commit()
         db.refresh(category)
 
-        return {
-            "success": True,
-            "message": "Item category updated successfully",
-            "data": category,
-        }
+        return success_response(
+        data=category,
+        message="Item category created successfully",
+        # status_code=status.HTTP_201_CREATED,
+    )
+    
     except HTTPException:
         db.rollback()
         raise
@@ -646,7 +693,6 @@ def delete_item_category(
             detail="Failed to delete item category",
         )
     
-
 #STORAGE LOCATION API's
 @router.post("/add-storage",response_model=StorageLocationCreateResponse,status_code=status.HTTP_201_CREATED)
 def add_storage_location(
@@ -691,12 +737,10 @@ def add_storage_location(
 
 
         return {
-            "data": {
-                "status": status.HTTP_201_CREATED,
-                "message": "Storage location added successfully!",
-                "location": location,
-                "result": result.id
-            }
+            "status_code": 201,
+            "message": "Storage location added successfully!",
+            "location": location,
+            "result":result.id
         }
     
     except IntegrityError:
@@ -716,7 +760,7 @@ def add_storage_location(
             detail="Failed to create storage location"
         )
     
-@router.get("/get-all-storage", response_model=list[StorageLocationResponse])
+@router.get("/get-all-storage/all", response_model=StorageLocationsListResponse)
 def get_storage_locations (
     skip: int = 0,
     limit: int = 100,
@@ -730,11 +774,9 @@ def get_storage_locations (
             ).offset(skip).limit(limit).all()
        
         return {
-            "data": {
-                "status": status.HTTP_200_OK,
-                "message": "Storage locations fetched successfully",
-                "storage_locations": locations
-            }
+            "status": 200,
+            "message": "Storage locations fetched successfully",
+            "data": locations
         }
 
     except SQLAlchemyError:
@@ -743,7 +785,7 @@ def get_storage_locations (
             detail="Failed to fresh storage locations"
         )    
     
-@router.get("/storage-id/{location_id}",response_model=StorageLocationResponse)
+@router.get("/storage-id/{location_id}",response_model=StorageLocationDetailResponse)
 def get_location_by_id(
     location_id: int,
     db: Session = Depends(get_db),
@@ -763,11 +805,9 @@ def get_location_by_id(
             )
 
         return {
-            "data": {
-                "status": status.HTTP_200_OK,
-                "message": "Storage location fetched successfully",
-                "location": location
-            }
+            "status": 200,
+            "message": "Storage locations fetched successfully",
+            "data": location
         }
 
     except HTTPException:
@@ -778,7 +818,7 @@ def get_location_by_id(
             detail="Failed to fetch storage location"
         )
 
-@router.put("/update-storage/{location_id}", response_model=StorageLocationResponse)
+@router.put("/update-storage/{location_id}", response_model=StorageLocationUpdateResponse)
 def update_location(
     location_id: int,
     data: StorageLocationUpdate,
@@ -818,11 +858,9 @@ def update_location(
         db.commit()
         db.refresh(location)
         return {
-            "data": {
-                "status": status.HTTP_200_OK,
-                "message": "Storage location updated successfully",
-                "location": location
-            }
+           "status": 200,
+            "message": "Storage location updated successfully",
+            "data": location  
         }
 
     except HTTPException:
@@ -840,7 +878,7 @@ def update_location(
             detail="Failed to update storage location"
         )
 
-@router.delete("/delete-storage-id/{location_id}", response_model=StorageLocationResponse)
+@router.delete("/delete-storage-id/{location_id}", response_model=StorageLocationDeleteResponse)
 def delete_location(
     location_id: int,
     db: Session = Depends(get_db),
@@ -862,11 +900,9 @@ def delete_location(
         db.commit()
         db.refresh(location)
         return {
-            "data": {
-                "status": status.HTTP_200_OK,
-                "message": "Storage location deleted successfully",
-                "location": location
-            }
+            "status": 200,
+            "message": "Storage location deleted successfully",
+            "data": location 
         }
 
     except HTTPException:
