@@ -3,7 +3,11 @@ app/api/v1/endpoints/inventory.py
 Inventory management endpoints
 """
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException, Query , status
+from enum import Enum
+from io import BytesIO
+import math
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile , status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date, datetime
@@ -22,6 +26,7 @@ from app.schemas.common import ApiResponse
 from app.utils.inventory_batch_helper import calculate_days_until_expiry, determine_lifecycle_stage, generate_batch_number_sequential
 from app.utils.response_helper import success_response
 from app.tasks import update_batch_lifecycles_status
+import pandas as pd
 
 router = APIRouter()
 
@@ -46,6 +51,7 @@ class StorageLocationDeleteResponse(BaseModel):
     status: int
     message: str
     data: StorageLocationResponse    
+
 #INVENTORY-ITEM API's
 @router.post("/add_item", response_model=InventoryResponse, status_code=status.HTTP_201_CREATED)
 def add_item(
@@ -125,6 +131,7 @@ def add_item(
             purchase_unit_size=item.purchase_unit_size,
             shelf_life_in_days=item.shelf_life_in_days,
             date_added=item.date_added or datetime.utcnow(),
+            is_active=True
         )
 
         db.add(inventory_item)
@@ -160,6 +167,247 @@ def add_item(
             detail="Failed to add inventory item",
         )
     
+class UnitType(str, Enum):
+    KILOGRAM = "kg"
+    GRAM = "gm"
+    MILLIGRAM = "mg"
+    LITER = "liter"
+    MILLILITER = "ml"
+
+
+UNIT_MAPPING = {
+    "kg": "kg",
+    "kgs": "kg",
+    "kilogram": "kg",
+    "kilograms": "kg",
+
+    "g": "gm",
+    "gm": "gm",
+    "gram": "gm",
+    "grams": "gm",
+
+    "mg": "mg",
+    "milligram": "mg",
+    "milligrams": "mg",
+
+    "l": "liter",
+    "liter": "liter",
+    "litre": "liter",
+
+    "ml": "ml",
+    "milliliter": "ml",
+    "millilitre": "ml",
+}
+
+@router.post("/add_items_via_excel", status_code=status.HTTP_201_CREATED)
+def add_items_via_excel(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+
+    if not current_user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant access required",
+        )
+
+    if not file.filename.lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file type. Upload .xlsx or .xls only",
+        )
+
+    try:
+        file.file.seek(0)
+        contents = file.file.read()
+    
+        if len(contents) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Uploaded file is empty"
+            )
+    
+        df = pd.read_excel(BytesIO(contents), engine="openpyxl")
+
+    except pd.errors.EmptyDataError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Excel file contains no data"
+        )
+    except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Error reading Excel: {str(e)}"
+            )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unable to read Excel file",
+        )
+
+    if df.empty:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Excel file is empty",
+        )
+
+    required_columns = {
+        "name",
+        "quantity",
+        "unit",
+        "item_category_id",
+        "storage_location_id",
+    }
+
+    missing_columns = required_columns - set(df.columns)
+    if missing_columns:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Missing required columns: {', '.join(missing_columns)}",
+        )
+
+    validated_rows = []
+    errors = []
+
+    for index, row in df.iterrows():
+        try:
+            row_number = index + 2  
+
+            name = str(row.get("name")).strip()
+            if not name:
+                raise ValueError("Item name is required")
+
+            if pd.isna(row["quantity"]) or float(row["quantity"]) <= 0:
+                raise ValueError("Quantity must be greater than 0")
+            quantity = float(row["quantity"])
+
+            if not pd.isna(row.get("price_per_unit")):
+                price_per_unit = float(row["price_per_unit"])
+                total_cost = quantity * price_per_unit
+            elif not pd.isna(row.get("total_cost")):
+                total_cost = float(row["total_cost"])
+                price_per_unit = total_cost / quantity
+            else:
+                raise ValueError("Either price_per_unit or total_cost is required")
+
+            if price_per_unit <= 0:
+                raise ValueError("Price per unit must be greater than 0")
+
+            raw_unit = str(row.get("unit")).strip().lower()
+            if not raw_unit:
+                raise ValueError("Unit is required")
+
+            if raw_unit not in UNIT_MAPPING:
+                raise ValueError(
+                    f"Invalid unit '{row.get('unit')}'. "
+                    f"Allowed values: {list(set(UNIT_MAPPING.values()))}"
+                )
+
+            unit = UNIT_MAPPING[raw_unit]
+
+            category = db.query(ItemCategory).filter(
+                ItemCategory.id == int(row["item_category_id"]),
+                ItemCategory.tenant_id == current_user.tenant_id,
+            ).first()
+            if not category:
+                raise ValueError("Invalid item_category_id")
+
+            storage = db.query(StorageLocation).filter(
+                StorageLocation.id == int(row["storage_location_id"]),
+                StorageLocation.tenant_id == current_user.tenant_id,
+            ).first()
+            if not storage:
+                raise ValueError("Invalid storage_location_id")
+
+            validated_rows.append({
+                "row": row,
+                "quantity": quantity,
+                "price_per_unit": price_per_unit,
+                "total_cost": total_cost,
+                "unit": unit,  
+            })
+
+        except (ValueError, TypeError) as e:
+            errors.append({
+                "row": row_number,
+                "item_name": row.get("name"),
+                "error": str(e),
+            })
+
+    if errors:
+        return {
+            "success": False,
+            "message": "Excel validation failed. No data saved.",
+            "summary": {
+                "total_rows": len(df),
+                "failed_count": len(errors),
+            },
+            "failed_rows": errors,
+        }
+    
+    try:
+        for item in validated_rows:
+            row = item["row"]
+
+            purchase_unit = None
+            if not pd.isna(row.get("purchase_unit")):
+                raw_purchase_unit = str(row.get("purchase_unit")).strip().lower()
+                if raw_purchase_unit in UNIT_MAPPING:
+                    purchase_unit = UNIT_MAPPING[raw_purchase_unit]
+
+            inventory_item = Inventory(
+                user_id=current_user.id,
+                tenant_id=current_user.tenant_id,
+                storage_location_id=int(row["storage_location_id"]),
+                item_category_id=int(row["item_category_id"]),
+                name=str(row["name"]).strip(),
+                sku=row.get("sku"),
+                quantity=item["quantity"],
+                current_quantity=item["quantity"],
+                unit=item["unit"], 
+                price_per_unit=item["price_per_unit"],
+                unit_cost=item["price_per_unit"],
+                total_cost=item["total_cost"],
+                type=row.get("type") or "",
+                reorder_point=row.get("reorder_point"),
+                expiry_date=row.get("expiry_date"),
+                purchase_unit=purchase_unit,
+                purchase_unit_size=row.get("purchase_unit_size"),
+                shelf_life_in_days=row.get("shelf_life_in_days"),
+                date_added=datetime.utcnow(),
+                is_active=True,
+            )
+
+            db.add(inventory_item)
+
+            expense = Expense(
+                tenant_id=current_user.tenant_id,
+                item_name=str(row["name"]).strip(),
+                quantity=item["quantity"],
+                total_cost=item["total_cost"],
+                date=datetime.utcnow(),
+            )
+            db.add(expense)
+
+        db.commit()
+
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error while saving Excel data",
+        )
+
+    return {
+        "success": True,
+        "message": "All items uploaded successfully",
+        "summary": {
+            "total_rows": len(validated_rows),
+            "saved_count": len(validated_rows),
+        },
+    }
+
 @router.get("/", response_model=InventoryListResponse)
 def get_all_inventory(
     db: Session = Depends(get_db),
@@ -1028,5 +1276,264 @@ def create_batch(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/items/{item_id}/get-baches-by-id/{batch_id}")
+def get_batch_by_id(
+    item_id: int,
+    batch_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        # Verify item belongs to tenant
+        item = (
+            db.query(Inventory)
+            .filter(
+                Inventory.id == item_id,
+                Inventory.tenant_id == current_user.tenant_id
+            )
+            .first()
+        )
 
+        if not item:
+            raise HTTPException(status_code=404, detail="Item not found")
+
+        # Fetch batch
+        batch = (
+            db.query(InventoryBatch)
+            .filter(
+                InventoryBatch.id == batch_id,
+                InventoryBatch.inventory_item_id == item_id,
+                InventoryBatch.tenant_id == current_user.tenant_id,
+                InventoryBatch.is_active == True
+            )
+            .first()
+        )
+
+        if not batch:
+            raise HTTPException(status_code=404, detail="Batch not found")
+
+        days_until_expiry = calculate_days_until_expiry(batch.expiry_date)
+
+        return {
+            "success": True,
+            "data": {
+                "id": batch.id,
+                "batch_number": batch.batch_number,
+                "expiry_date": batch.expiry_date,
+                "quantity_received": batch.quantity_received,
+                "quantity_remaining": batch.quantity_remaining,
+                "unit": batch.unit,
+                "packets": batch.packets,
+                "pieces": batch.pieces,
+                "total_pieces": batch.total_pieces,
+                "price_per_packet": batch.price_per_packet,
+                "price_per_piece": batch.price_per_piece,
+                "unit_cost": batch.unit_cost,
+                "lifecycle_stage": batch.lifecycle_stage.value,
+                "days_until_expiry": days_until_expiry,
+                "is_active": batch.is_active,
+                "created_at": batch.created_at
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/items/{item_id}/update-batch/{batch_id}")
+def update_batch(
+    item_id: int,
+    batch_id: int,
+    batch_data: BatchCreate,  
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        # 1. Validate item
+        item = (
+            db.query(Inventory)
+            .filter(
+                Inventory.id == item_id,
+                Inventory.tenant_id == current_user.tenant_id
+            )
+            .first()
+        )
+
+        if not item:
+            raise HTTPException(status_code=404, detail="Item not found")
+
+        # 2. Validate batch
+        batch = (
+            db.query(InventoryBatch)
+            .filter(
+                InventoryBatch.id == batch_id,
+                InventoryBatch.inventory_item_id == item_id,
+                InventoryBatch.tenant_id == current_user.tenant_id,
+                InventoryBatch.is_active == True
+            )
+            .first()
+        )
+
+        if not batch:
+            raise HTTPException(status_code=404, detail="Batch not found")
+
+        # 3. Required field checks
+        if not batch_data.quantity_received:
+            raise HTTPException(status_code=400, detail="quantity_received is required")
+
+        if not batch_data.unit_cost:
+            raise HTTPException(status_code=400, detail="unit_cost is required")
+
+        if not batch_data.expiry_date:
+            raise HTTPException(status_code=400, detail="expiry_date is required")
+
+        # 4. Recalculate lifecycle
+        days_until_expiry = calculate_days_until_expiry(batch_data.expiry_date)
+        lifecycle = determine_lifecycle_stage(
+            days_until_expiry,
+            item.fresh_threshold_days or 3,
+            item.near_expiry_threshold_days or 1
+        )
+
+        # 5. Adjust inventory quantity difference
+        old_qty = Decimal(str(batch.quantity_received))
+        new_qty = Decimal(str(batch_data.quantity_received))
+        qty_difference = new_qty - old_qty
+
+        current_item_qty = Decimal(str(item.current_quantity or 0))
+        current_batch_remaining = Decimal(str(batch.quantity_remaining or 0))
+
+
+        item.current_quantity = float(current_item_qty + qty_difference)
+
+        batch.quantity_received = float(new_qty)
+        batch.quantity_remaining = float(current_batch_remaining + qty_difference)
+
+
+        # 6. Update batch fields
+        batch.expiry_date = batch_data.expiry_date
+        batch.quantity_received = batch_data.quantity_received
+        batch.quantity_remaining = (
+            batch.quantity_remaining + float(qty_difference)
+        )
+        batch.unit = batch_data.unit
+        batch.packets = batch_data.packets
+        batch.pieces = batch_data.pieces
+        batch.total_pieces = batch_data.total_pieces
+        batch.price_per_packet = batch_data.price_per_packet
+        batch.price_per_piece = batch_data.price_per_piece
+        batch.unit_cost = batch_data.unit_cost
+        batch.lifecycle_stage = lifecycle
+
+        unit_cost = Decimal(str(batch_data.unit_cost))
+
+        transaction = InventoryTransaction(
+            tenant_id=current_user.tenant_id,
+            inventory_item_id=item_id,
+            batch_id=batch.id,
+            transaction_type=TransactionType.ADJUSTMENT,
+            quantity=float(qty_difference),
+            unit_cost=float(unit_cost),
+            total_value=float(qty_difference * unit_cost),
+            reference_id=f"Batch {batch.batch_number} updated"
+        )
+
+        db.add(transaction)
+        db.commit()
+
+        return {
+            "success": True,
+            "message": "Batch updated successfully",
+            "batch_id": batch.id,
+            "lifecycle_stage": lifecycle.value,
+            "days_until_expiry": days_until_expiry
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/items/{item_id}/delete-batch-by-id/{batch_id}")
+def delete_batch(
+    item_id: int,
+    batch_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        item = (
+            db.query(Inventory)
+            .filter(
+                Inventory.id == item_id,
+                Inventory.tenant_id == current_user.tenant_id
+            )
+            .first()
+        )
+
+        if not item:
+            raise HTTPException(status_code=404, detail="Item not found")
+
+        batch = (
+            db.query(InventoryBatch)
+            .filter(
+                InventoryBatch.id == batch_id,
+                InventoryBatch.inventory_item_id == item_id,
+                InventoryBatch.tenant_id == current_user.tenant_id,
+                InventoryBatch.is_active == True
+            )
+            .first()
+        )
+
+        if not batch:
+            raise HTTPException(status_code=404, detail="Batch not found")
+
+        if batch.quantity_remaining < batch.quantity_received:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete batch with consumed quantity"
+            )
+
+        batch_qty = Decimal(str(batch.quantity_received))
+        item_qty = Decimal(str(item.current_quantity or 0))
+
+        item.current_quantity = float(item_qty - batch_qty)
+
+        if item.current_quantity < 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Delete would cause negative inventory"
+            )
+
+        batch.is_active = False
+
+        # 5. Log transaction
+        transaction = InventoryTransaction(
+            tenant_id=current_user.tenant_id,
+            inventory_item_id=item_id,
+            batch_id=batch.id,
+            transaction_type=TransactionType.ADJUSTMENT,
+            quantity=float(-batch_qty),
+            unit_cost=batch.unit_cost,
+            total_value=float(-batch_qty * Decimal(str(batch.unit_cost))),
+            reference_id=f"Batch {batch.batch_number} deleted"
+        )
+
+        db.add(transaction)
+        db.commit()
+
+        return {
+            "success": True,
+            "message": "Batch deleted successfully",
+            "batch_id": batch.id
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 

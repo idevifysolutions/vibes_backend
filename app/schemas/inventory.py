@@ -1,7 +1,7 @@
 # app/schemas/inventory.py
 from pydantic import BaseModel, ConfigDict , Field
 from datetime import date, datetime
-from typing import List, Optional, Literal
+from typing import Any, Dict, List, Optional, Literal
 from enum import Enum
 from uuid import UUID
 
@@ -118,7 +118,8 @@ class InventoryResponse(BaseModel):
 class InventoryListResponse(BaseModel):
     success: bool
     message: str
-    data: List[InventoryOut]     
+    meta: Dict[str, Any]
+    data: List[InventoryOut]  
 
 
 
