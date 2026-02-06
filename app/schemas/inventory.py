@@ -97,16 +97,28 @@ class InventoryUpdate(BaseModel):
     date_added: Optional[datetime] = None
 
 
-class InventoryOut(InventoryBase):
+class InventoryOut(BaseModel):
     id: int
     name: str
     quantity: float
-    unit: UnitType  
+    unit: UnitType
+    sku:str
+
+    item_category: Optional[str]
+    storage_location: Optional[str]
+
     price_per_unit: float
     total_cost: float
+
+    purchase_unit: Optional[str]
+    purchase_unit_size: Optional[int]
+
+    type: Optional[str]
+    shelf_life_in_days: Optional[int]
+
     date_added: datetime
-    expiry_date: date | None
-    
+    expiry_date: Optional[date]
+
     class Config:
         from_attributes = True
 

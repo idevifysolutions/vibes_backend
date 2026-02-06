@@ -155,13 +155,12 @@ def add_item(
         }
     
     except HTTPException as e:
-        print(e,"PRINT")
         db.rollback()
         raise
 
     except Exception as e:
         db.rollback()
-        print("ERROR",e)
+        ("ERROR",e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to add inventory item",
@@ -432,7 +431,6 @@ def get_all_inventory(
         raise
 
     except Exception as e:
-        print("GET INVENTORY", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch inventory",
@@ -547,18 +545,12 @@ def delete_inventory_item(
     current_user: User = Depends(get_current_user),
 ):
     try:
-        print(f"DELETE called for item_id: {item_id}")
-        print(f"Current user tenant_id: {current_user.tenant_id}")
-        
         item = db.query(Inventory).filter(
             Inventory.id == item_id,
             Inventory.tenant_id == current_user.tenant_id
         ).first()
-
-        print(f"Item found: {item}") 
         
         if not item:
-            print("Item not found - raising 404")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Inventory item not found"
@@ -579,7 +571,6 @@ def delete_inventory_item(
         
     except SQLAlchemyError as e:
         db.rollback()
-        print(f"Database error during delete: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete inventory item due to database error"
@@ -587,7 +578,6 @@ def delete_inventory_item(
         
     except Exception as e:
         db.rollback()
-        print(f"Unexpected error during delete: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while deleting inventory item"
@@ -646,10 +636,7 @@ def create_item_category(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid category_type: {data.category_type}",
         )
-    
-    print(f"DEBUG - Enum name: {category_type_enum.name}")  # Should print "PERISHABLE"
-    print(f"DEBUG - Enum value: {category_type_enum.value}")  
-    
+        
     existing =( db.query(ItemCategory).filter(
         ItemCategory.name == data.name,
         ItemCategory.tenant_id == tenant_id,
@@ -691,7 +678,6 @@ def list_item_categories(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    print("HELLO")
     if not current_user.tenant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -735,8 +721,8 @@ def get_inventory_item(
     try:
         service = InventoryService(db)
         item = service.get_item_by_id(
-            item_id=item_id,
-            tenant_id=current_user.tenant_id,
+            item_id,
+            current_user.tenant_id,
         )
 
         if not item:
@@ -754,10 +740,28 @@ def get_inventory_item(
             # )
         
         return {
-            "success": True,
-            "message": "Inventory item fetched successfully",
-            "data": item,
-        }
+           "success": True,
+                "message": "Inventory item fetched successfully",
+                "data": {
+                    "id": item.id,
+                    "name": item.name,
+                    "quantity": item.quantity,
+                    "unit": item.unit,
+                    "sku":item.sku,
+                    "item_category": item.item_category.name if item.item_category else None,
+                    "storage_location": item.storage_location.name if item.storage_location else None,
+                    "price_per_unit": item.price_per_unit,
+                    "total_cost": item.total_cost,
+                    "purchase_unit": item.purchase_unit,
+                    "purchase_unit_size": item.purchase_unit_size,
+                    "type": item.type,
+                    # "expiry_life": item.expiry_life,
+                    "shelf_life_in_days": item.shelf_life_in_days,
+                    "date_added": item.date_added,
+                    "expiry_date": item.expiry_date,
+                }
+            }
+
 
     except HTTPException:
         raise
@@ -1173,7 +1177,6 @@ def create_batch(
     try:
 
         item = (db.query(Inventory).filter(Inventory.id == item_id).filter(Inventory.tenant_id ==current_user.tenant_id).first())
-        print(item,"ITEMMMMM")
 
         if not item:
             raise HTTPException(status_code=404, detail="Item not found")
@@ -1237,7 +1240,6 @@ def create_batch(
         current_qty = Decimal(str(item.current_quantity)) if item.current_quantity else Decimal(0)
         if item.expiry_date and item.expiry_date < date.today():
             # Standalone is expired, reset to only this batch
-            print(f"{item.name} standalone stock expired on {item.expiry_date}, resetting quantity")
             item.current_quantity = float(Decimal(str(batch_data.quantity_received)))
         else:
             # Standalone is fresh or no expiry, add to existing
@@ -1272,7 +1274,6 @@ def create_batch(
     except HTTPException:
         raise
     except Exception as e:
-        print("PRINTTT", e)
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
