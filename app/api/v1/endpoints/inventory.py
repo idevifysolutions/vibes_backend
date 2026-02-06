@@ -411,30 +411,57 @@ def add_items_via_excel(
 def get_all_inventory(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
-    ):
-
+):
     if not current_user.tenant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Tenant access required"
         )
-    
-    try:
-       inventory =( db.query(Inventory).filter(Inventory.tenant_id == current_user.tenant_id,Inventory.is_active == True).all())
 
-       return {
+    try:
+        items = (
+            db.query(Inventory)
+            .filter(
+                Inventory.tenant_id == current_user.tenant_id,
+                Inventory.is_active == True
+            )
+            .all()
+        )
+
+        return {
             "success": True,
             "message": "Inventory fetched successfully",
-            "data": inventory,
-       }
-    except HTTPException:
-        raise
+            "meta": {
+                "total": len(items)
+            },
+            "data": [
+                {
+                    "id": item.id,
+                    "name": item.name,
+                    "quantity": item.quantity,
+                    "unit": item.unit,
+                    "sku": item.sku,
+                    "item_category": item.item_category.name if item.item_category else None,
+                    "storage_location": item.storage_location.name if item.storage_location else None,
+                    "price_per_unit": item.price_per_unit,
+                    "total_cost": item.total_cost,
+                    "purchase_unit": item.purchase_unit,
+                    "purchase_unit_size": item.purchase_unit_size,
+                    "type": item.type,
+                    "shelf_life_in_days": item.shelf_life_in_days,
+                    "date_added": item.date_added,
+                    "expiry_date": item.expiry_date,
+                }
+                for item in items
+            ]
+        }
 
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch inventory",
         )
+
 
 @router.get("/search", response_model=InventoryListResponse, status_code=status.HTTP_200_OK)
 def search_inventory(

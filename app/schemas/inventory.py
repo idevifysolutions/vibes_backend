@@ -133,8 +133,6 @@ class InventoryListResponse(BaseModel):
     meta: Dict[str, Any]
     data: List[InventoryOut]  
 
-
-
 # class InventorySearch(BaseModel):
 #     name: Optional[str] = None
 #     type: Optional[str] = None
