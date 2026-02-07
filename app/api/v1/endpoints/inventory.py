@@ -634,7 +634,6 @@ def delete_all_inventory(
         "message": f"Deleted {deleted_count} item(s) from inventory"
     }
 
-
 #ITEM-CATEGORIES API'S
 @router.post("/add-item-category",response_model=ItemCategoryResponse)
 def create_item_category(
@@ -729,7 +728,6 @@ def list_item_categories(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch item categories",
         )   
-
 
 @router.get("/{item_id}", response_model=InventoryResponse, status_code=status.HTTP_200_OK)
 def get_inventory_item(
@@ -1199,6 +1197,11 @@ def create_batch(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if not current_user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant access required",
+        )
     try:
 
         item = (db.query(Inventory).filter(Inventory.id == item_id).filter(Inventory.tenant_id ==current_user.tenant_id).first())
@@ -1301,6 +1304,51 @@ def create_batch(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    
+@router.get("/items/get-all-batches")
+def get_all_batches(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not current_user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant access required",
+        )
+    
+    try:
+        batches = (
+            db.query(InventoryBatch)
+            .filter(InventoryBatch.tenant_id == current_user.tenant_id)
+            .order_by(InventoryBatch.created_at.desc())
+            .all()
+        )
+
+        print(batches,"BATCHH")
+
+        if not batches:
+            return {
+                "success": True,
+                "count": 0,
+                "data": [],
+                "message": "No batches found"
+            }
+
+        return {
+            "success": True,
+            "count": len(batches),
+            "data": batches
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch batches: {str(e)}"
+        )
 
 @router.get("/items/{item_id}/get-baches-by-id/{batch_id}")
 def get_batch_by_id(
@@ -1309,6 +1357,12 @@ def get_batch_by_id(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if not current_user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant access required",
+        )
+    
     try:
         # Verify item belongs to tenant
         item = (
@@ -1376,6 +1430,12 @@ def update_batch(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    
+    if not current_user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant access required",
+        )
     try:
         # 1. Validate item
         item = (
@@ -1490,6 +1550,11 @@ def delete_batch(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    if not current_user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant access required",
+        )
     try:
         item = (
             db.query(Inventory)
