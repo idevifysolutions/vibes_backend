@@ -1305,8 +1305,9 @@ def create_batch(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     
-@router.get("/items/get-all-batches")
-def get_all_batches(
+@router.get("/items/{item_id}/batches")
+def get_batches_by_item(
+    item_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -1315,41 +1316,47 @@ def get_all_batches(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Tenant access required",
         )
-    
+
     try:
+        item = (
+            db.query(Inventory)
+            .filter(
+                Inventory.id == item_id,
+                Inventory.tenant_id == current_user.tenant_id
+            )
+            .first()
+        )
+
+        if not item:
+            raise HTTPException(status_code=404, detail="Inventory item not found")
+
         batches = (
             db.query(InventoryBatch)
-            .filter(InventoryBatch.tenant_id == current_user.tenant_id)
-            .order_by(InventoryBatch.created_at.desc())
+            .filter(
+                InventoryBatch.inventory_item_id == item_id,
+                InventoryBatch.tenant_id == current_user.tenant_id
+            )
+            .order_by(InventoryBatch.expiry_date.asc())
             .all()
         )
 
-        print(batches,"BATCHH")
-
-        if not batches:
-            return {
-                "success": True,
-                "count": 0,
-                "data": [],
-                "message": "No batches found"
-            }
-
         return {
             "success": True,
+            "item_id": item_id,
+            "item_name": item.name,
             "count": len(batches),
             "data": batches
         }
 
     except HTTPException:
         raise
-
     except Exception as e:
         db.rollback()
         raise HTTPException(
             status_code=500,
             detail=f"Failed to fetch batches: {str(e)}"
         )
-
+    
 @router.get("/items/{item_id}/get-baches-by-id/{batch_id}")
 def get_batch_by_id(
     item_id: int,
