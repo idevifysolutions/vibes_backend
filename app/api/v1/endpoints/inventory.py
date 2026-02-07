@@ -406,7 +406,7 @@ def add_items_via_excel(
         },
     }
 
-@router.get("/", response_model=InventoryListResponse)
+@router.get("/")
 def get_all_inventory(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -447,6 +447,7 @@ def get_all_inventory(
                     "purchase_unit": item.purchase_unit,
                     "purchase_unit_size": item.purchase_unit_size,
                     "type": item.type,
+                    "lifecycle_stage": item.lifecycle_stage,
                     "shelf_life_in_days": item.shelf_life_in_days,
                     "date_added": item.date_added,
                     "expiry_date": item.expiry_date,
@@ -729,7 +730,7 @@ def list_item_categories(
             detail="Failed to fetch item categories",
         )   
 
-@router.get("/{item_id}", response_model=InventoryResponse, status_code=status.HTTP_200_OK)
+@router.get("/{item_id}",status_code=status.HTTP_200_OK)
 def get_inventory_item(
     item_id: int, 
     db: Session = Depends(get_db),
@@ -778,7 +779,7 @@ def get_inventory_item(
                     "purchase_unit": item.purchase_unit,
                     "purchase_unit_size": item.purchase_unit_size,
                     "type": item.type,
-                    # "expiry_life": item.expiry_life,
+                    "lifecycle_stage": item.lifecycle_stage,
                     "shelf_life_in_days": item.shelf_life_in_days,
                     "date_added": item.date_added,
                     "expiry_date": item.expiry_date,

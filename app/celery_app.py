@@ -37,7 +37,11 @@ celery_app.conf.beat_schedule  = {
         # "schedule": crontab(hour=8, minute=0),  # Daily at 8:00 AM UTC
          "schedule":60.0
     },
-    
+    "update-inventory-lifecycle-daily":{
+        "task":"app.tasks.update_all_inventory_lifecycles",
+        # "schedule": crontab(hour=1, minute=5),
+         "schedule":60.0
+    },
     # # NEW: Cleanup resolved alerts daily at midnight
     # "cleanup-resolved-alerts": {
     #     "task": "app.alert_tasks.cleanup_old_resolved_alerts",

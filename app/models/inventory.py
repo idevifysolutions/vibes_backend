@@ -95,6 +95,7 @@ class Inventory(TenantMixin,Base):
     fresh_threshold_days = Column(Integer, default=3)
     near_expiry_threshold_days = Column(Integer, default=1)
     current_quantity = Column(Numeric(12, 3), default=0)
+    lifecycle_stage = Column( Enum(PerishableLifecycle),nullable=True)
     is_active = Column(Boolean,default=True)
     date_added = Column(DateTime, default=datetime.utcnow, nullable=True)
     updated_at = Column(DateTime, server_default=func.now(),onupdate=func.now(),default=datetime.utcnow)
