@@ -53,7 +53,7 @@ class StorageLocationDeleteResponse(BaseModel):
     data: StorageLocationResponse    
 
 #INVENTORY-ITEM API's
-@router.post("/add_item", response_model=InventoryResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/add_item", status_code=status.HTTP_201_CREATED)
 def add_item(
     item: InventoryItemCreate,
     db: Session = Depends(get_db),
@@ -172,7 +172,6 @@ class UnitType(str, Enum):
     MILLIGRAM = "mg"
     LITER = "liter"
     MILLILITER = "ml"
-
 
 UNIT_MAPPING = {
     "kg": "kg",
@@ -462,7 +461,6 @@ def get_all_inventory(
             detail="Failed to fetch inventory",
         )
 
-
 @router.get("/search", response_model=InventoryListResponse, status_code=status.HTTP_200_OK)
 def search_inventory(
     name: Optional[str] = Query(None),
@@ -511,7 +509,7 @@ def search_inventory(
             detail="Failed to search inventory",
         )
 
-@router.put("/{item_id}", response_model=InventoryResponse, status_code=status.HTTP_200_OK)
+@router.put("/{item_id}", status_code=status.HTTP_200_OK)
 def update_inventory_item(
     item_id: int,
     item_update: InventoryUpdate,
@@ -748,8 +746,8 @@ def get_inventory_item(
     try:
         service = InventoryService(db)
         item = service.get_item_by_id(
-            item_id,
-            current_user.tenant_id,
+            item_id=item_id,
+            tenant_id=current_user.tenant_id,
         )
 
         if not item:
